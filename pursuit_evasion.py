@@ -14,6 +14,8 @@ config = {
         'drag_coefficient': 0.02,
         'awareness_mode': 1,   # 1=unaware,2=vague,3=directional,4=full
         'turn_rate': np.pi,    # rad/s
+        'up_vector': (0.0, 0.0, 1.0),
+        'stall_angle': np.deg2rad(60),  # max angle from up vector
     },
     'pursuer': {
         'mass': 1000.0,
@@ -21,16 +23,59 @@ config = {
         'top_speed': 350.0,
         'drag_coefficient': 0.03,
         'turn_rate': np.pi * 1.5,
+        'up_vector': (0.0, 0.0, 1.0),
+        'stall_angle': np.deg2rad(75),
     },
     'gravity': 9.81,
     'time_step': 0.1,
     'capture_radius': 1.0,
     'target_position': (1000.0, 0.0, 0.0),
+    # parameters controlling the pursuer initial position and orientation
+    # The pursuer is sampled in a cone beneath the evader. "cone_half_angle"
+    # controls how wide the cone is, while the range limits specify how far
+    # from the evader (in metres) the pursuer can start. "force_target_radius"
+    # defines the radius of the sphere around the evader that the initial force
+    # vector will be pointed toward. These values influence how early or late
+    # interceptions can occur during an episode.
+    'pursuer_start': {
+        'cone_half_angle': np.deg2rad(45.0),
+        'min_range': 1000.0,
+        'max_range': 5000.0,
+        'force_target_radius': 500.0,
+        'initial_speed_range': (0.0, 50.0),
+    },
     'initial_positions': {
         'evader': (0.0, 0.0, 3000.0),
-        'pursuer': (500.0, -500.0, 500.0),
     }
 }
+
+
+def sample_pursuer_start(evader_pos: np.ndarray, cfg: dict):
+    """Sample initial pursuer state and force direction."""
+    params = cfg['pursuer_start']
+    cone = params['cone_half_angle']
+    r = np.random.uniform(params['min_range'], params['max_range'])
+    yaw = np.random.uniform(0.0, 2 * np.pi)
+    pitch = np.random.uniform(0.0, cone)
+    # direction from evader to pursuer in world frame (beneath the evader)
+    dir_vec = np.array([
+        np.sin(pitch) * np.cos(yaw),
+        np.sin(pitch) * np.sin(yaw),
+        -np.cos(pitch),
+    ], dtype=np.float32)
+    pos = evader_pos + dir_vec * r
+
+    speed = np.random.uniform(*params['initial_speed_range'])
+    vel = dir_vec * speed
+
+    # point the initial force vector toward a random point near the evader
+    tgt_offset = np.random.randn(3).astype(np.float32)
+    tgt_offset /= np.linalg.norm(tgt_offset) + 1e-8
+    tgt_offset *= np.random.uniform(0.0, params['force_target_radius'])
+    tgt = evader_pos + tgt_offset
+    to_tgt = tgt - pos
+    to_tgt /= np.linalg.norm(to_tgt) + 1e-8
+    return pos, vel, to_tgt
 
 
 class PursuitEvasionEnv(gym.Env):
@@ -56,23 +101,39 @@ class PursuitEvasionEnv(gym.Env):
             'evader': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.evader_obs_dim,), dtype=np.float32),
         })
         self.action_space = gym.spaces.Dict({
+            # actions: [acceleration magnitude, azimuth, polar]
             'pursuer': gym.spaces.Box(
-                low=-cfg['pursuer']['max_acceleration'],
-                high=cfg['pursuer']['max_acceleration'],
-                shape=(3,), dtype=np.float32),
+                low=np.array([0.0, -np.pi, 0.0], dtype=np.float32),
+                high=np.array([
+                    cfg['pursuer']['max_acceleration'],
+                    np.pi,
+                    cfg['pursuer']['stall_angle'],
+                ], dtype=np.float32),
+            ),
             'evader': gym.spaces.Box(
-                low=-cfg['evader']['max_acceleration'],
-                high=cfg['evader']['max_acceleration'],
-                shape=(3,), dtype=np.float32),
+                low=np.array([0.0, -np.pi, 0.0], dtype=np.float32),
+                high=np.array([
+                    cfg['evader']['max_acceleration'],
+                    np.pi,
+                    cfg['evader']['stall_angle'],
+                ], dtype=np.float32),
+            ),
         })
         self.reset()
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         self.evader_pos = np.array(self.cfg['initial_positions']['evader'], dtype=np.float32)
-        self.pursuer_pos = np.array(self.cfg['initial_positions']['pursuer'], dtype=np.float32)
         self.evader_vel = np.zeros(3, dtype=np.float32)
-        self.pursuer_vel = np.zeros(3, dtype=np.float32)
+        self.evader_force_dir = np.array(self.cfg['evader']['up_vector'], dtype=np.float32)
+        self.evader_force_dir /= np.linalg.norm(self.evader_force_dir) + 1e-8
+        self.evader_force_mag = 0.0
+
+        p_pos, p_vel, p_dir = sample_pursuer_start(self.evader_pos, self.cfg)
+        self.pursuer_pos = p_pos.astype(np.float32)
+        self.pursuer_vel = p_vel.astype(np.float32)
+        self.pursuer_force_dir = p_dir.astype(np.float32)
+        self.pursuer_force_mag = 0.0
         return self._get_obs(), {}
 
     def step(self, action: dict):
@@ -88,27 +149,51 @@ class PursuitEvasionEnv(gym.Env):
 
     def _update_agent(self, name: str, action: np.ndarray):
         cfg_a = self.cfg[name]
-        mass = cfg_a['mass']
         max_acc = cfg_a['max_acceleration']
         top_speed = cfg_a['top_speed']
         drag_c = cfg_a['drag_coefficient']
+        turn_rate = cfg_a['turn_rate']
+        stall = cfg_a['stall_angle']
         if name == 'evader':
             pos = self.evader_pos
             vel = self.evader_vel
+            dir_vec = self.evader_force_dir
             gravity = np.array([0.0, 0.0, -self.cfg['gravity']], dtype=np.float32)
         else:
             pos = self.pursuer_pos
             vel = self.pursuer_vel
+            dir_vec = self.pursuer_force_dir
             gravity = np.zeros(3, dtype=np.float32)
 
-        # limit action magnitude
-        acc_cmd = action
-        norm = np.linalg.norm(acc_cmd)
-        if norm > max_acc:
-            acc_cmd = acc_cmd / norm * max_acc
+        mag = float(np.clip(action[0], 0.0, max_acc))
+        theta = float(action[1])
+        phi = float(np.clip(action[2], 0.0, stall))
+        target_dir = np.array([
+            np.sin(phi) * np.cos(theta),
+            np.sin(phi) * np.sin(theta),
+            np.cos(phi),
+        ], dtype=np.float32)
+        target_dir /= np.linalg.norm(target_dir) + 1e-8
 
-        drag = -drag_c * vel * np.linalg.norm(vel)
-        acc_total = acc_cmd + drag / mass + gravity
+        angle_diff = np.arccos(np.clip(np.dot(dir_vec, target_dir), -1.0, 1.0))
+        max_change = turn_rate * self.dt
+        if angle_diff > max_change:
+            ratio = max_change / (angle_diff + 1e-8)
+            new_dir = dir_vec * (1 - ratio) + target_dir * ratio
+            new_dir /= np.linalg.norm(new_dir) + 1e-8
+        else:
+            new_dir = target_dir
+
+        if name == 'evader':
+            self.evader_force_dir = new_dir
+            self.evader_force_mag = mag
+        else:
+            self.pursuer_force_dir = new_dir
+            self.pursuer_force_mag = mag
+
+        acc_cmd = new_dir * mag
+        drag = -drag_c * new_dir
+        acc_total = acc_cmd + drag + gravity
 
         vel[:] = vel + acc_total * self.dt
         speed = np.linalg.norm(vel)
@@ -228,8 +313,16 @@ def main():
     done = False
     step_count = 0
     while not done and step_count < 100:
-        action_e = np.random.uniform(-1, 1, size=3) * config['evader']['max_acceleration']
-        action_p = np.random.uniform(-1, 1, size=3) * config['pursuer']['max_acceleration']
+        action_e = np.array([
+            np.random.uniform(0.0, config['evader']['max_acceleration']),
+            np.random.uniform(-np.pi, np.pi),
+            np.random.uniform(0.0, config['evader']['stall_angle']),
+        ], dtype=np.float32)
+        action_p = np.array([
+            np.random.uniform(0.0, config['pursuer']['max_acceleration']),
+            np.random.uniform(-np.pi, np.pi),
+            np.random.uniform(0.0, config['pursuer']['stall_angle']),
+        ], dtype=np.float32)
         obs, reward, done, _, _ = env.step({'evader': action_e, 'pursuer': action_p})
         step_count += 1
     print(f"Episode finished after {step_count} steps. Reward: {reward}")
