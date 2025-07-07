@@ -45,3 +45,7 @@ python pursuit_evasion.py
 ```
 
 which is useful for quickly checking that the environment works.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
