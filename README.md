@@ -32,7 +32,18 @@ pursuer while the evader follows a scripted behaviour. To start training run:
 python train_pursuer.py
 ```
 
-The script will print evaluation statistics every few episodes and a final
+The script accepts a few command line options to control the training. For
+instance, to run 200 episodes with a smaller learning rate and evaluation every
+20 episodes:
+
+```bash
+python train_pursuer.py --episodes 200 --lr 5e-4 --eval-freq 20
+```
+
+The defaults for these options live in ``pursuit_evasion.py`` under
+``config['training']`` and can be modified directly in that file.
+
+It will print evaluation statistics every ``--eval-freq`` episodes and a final
 summary when training finishes.
 
 ## Additional scripts
@@ -45,3 +56,12 @@ python pursuit_evasion.py
 ```
 
 which is useful for quickly checking that the environment works.
+
+## Adjusting environment parameters
+
+All physical constants and environment options are stored in
+`config.yaml` in the repository root.  Simply edit this file to tweak
+values such as masses, maximum acceleration or the starting distance of
+the pursuer.  Both `pursuit_evasion.py` and `train_pursuer.py` load the
+configuration at runtime, so changes take effect the next time you run
+the scripts.
