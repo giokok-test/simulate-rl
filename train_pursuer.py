@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import torch
 import torch.nn as nn
@@ -81,12 +82,24 @@ def evaluate(policy: PursuerPolicy, env: PursuerOnlyEnv, episodes: int = 5) -> t
     return float(np.mean(rewards)), successes / episodes
 
 
-def train(num_episodes: int = 1):
-    """Train the pursuer policy with REINFORCE."""
+def train(cfg: dict):
+    """Train the pursuer policy with REINFORCE.
 
-    env = PursuerOnlyEnv(config)
+    Parameters
+    ----------
+    cfg:
+        Configuration dictionary. Expected to contain a ``training`` section
+        specifying ``episodes``, ``learning_rate`` and ``eval_freq``.
+    """
+
+    training_cfg = cfg.get('training', {})
+    num_episodes = training_cfg.get('episodes', 100)
+    learning_rate = training_cfg.get('learning_rate', 1e-3)
+    eval_freq = training_cfg.get('eval_freq', 10)
+
+    env = PursuerOnlyEnv(cfg)
     policy = PursuerPolicy(env.observation_space.shape[0])
-    optimizer = optim.Adam(policy.parameters(), lr=1e-3)
+    optimizer = optim.Adam(policy.parameters(), lr=learning_rate)
     gamma = 0.99
 
     for episode in range(num_episodes):
@@ -116,7 +129,7 @@ def train(num_episodes: int = 1):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        if (episode + 1) % 10 == 0:
+        if (episode + 1) % eval_freq == 0:
             # Periodically report progress on separate evaluation episodes
             avg_r, success = evaluate(policy, PursuerOnlyEnv(config))
             print(f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}")
@@ -127,4 +140,25 @@ def train(num_episodes: int = 1):
 
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser(description="Train the pursuer policy")
+    parser.add_argument("--episodes", type=int,
+                        help="number of training episodes")
+    parser.add_argument("--lr", type=float,
+                        help="optimizer learning rate")
+    parser.add_argument("--eval-freq", type=int,
+                        help="how often to run evaluation episodes")
+    args = parser.parse_args()
+
+    training_cfg = config.setdefault('training', {
+        'episodes': 100,
+        'learning_rate': 1e-3,
+        'eval_freq': 10,
+    })
+    if args.episodes is not None:
+        training_cfg['episodes'] = args.episodes
+    if args.lr is not None:
+        training_cfg['learning_rate'] = args.lr
+    if args.eval_freq is not None:
+        training_cfg['eval_freq'] = args.eval_freq
+
+    train(config)

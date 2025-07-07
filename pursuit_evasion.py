@@ -48,6 +48,12 @@ config = {
     },
     'initial_positions': {
         'evader': (0.0, 0.0, 3000.0),
+    },
+    # training hyperparameters used by ``train_pursuer.py``
+    'training': {
+        'episodes': 100,
+        'learning_rate': 1e-3,
+        'eval_freq': 10,
     }
 }
 
