@@ -279,7 +279,7 @@ def _make_mlp(input_dim: int, output_dim: int) -> nn.Sequential:
 
 
 class EvaderPolicy(nn.Module):
-    """Generator network producing evader actions."""
+    """Simple MLP producing evader actions."""
 
     def __init__(self, obs_dim: int):
         super().__init__()
@@ -301,7 +301,24 @@ class PursuerPolicy(nn.Module):
 
 
 def sample_trajectories(policy_e: EvaderPolicy, policy_p: PursuerPolicy, env: PursuitEvasionEnv, num_episodes: int):
-    """Placeholder for sampling trajectories using current policies."""
+    """Collect episodes using the current policies.
+
+    Parameters
+    ----------
+    policy_e : EvaderPolicy
+        Policy controlling the evader.
+    policy_p : PursuerPolicy
+        Policy controlling the pursuer.
+    env : PursuitEvasionEnv
+        Environment instance.
+    num_episodes : int
+        Number of episodes to sample.
+
+    Returns
+    -------
+    list[list[tuple]]
+        Each inner list contains ``(obs, reward)`` tuples for one episode.
+    """
     trajs = []
     for _ in range(num_episodes):
         obs, _ = env.reset()
@@ -318,29 +335,70 @@ def sample_trajectories(policy_e: EvaderPolicy, policy_p: PursuerPolicy, env: Pu
 
 
 def train_autogan(policy_e: EvaderPolicy, policy_p: PursuerPolicy, env: PursuitEvasionEnv, iterations: int = 1000):
-    """Placeholder AutoGAN-style training loop."""
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    """Minimal adversarial training loop.
+
+    This function demonstrates a very small working example of training the
+    evader and pursuer policies together using the REINFORCE algorithm.  It is
+    **not** a full AutoGAN implementation but serves as a functional placeholder
+    illustrating how both agents could be optimised simultaneously.
+    """
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     policy_e.to(device)
     policy_p.to(device)
     opt_e = optim.Adam(policy_e.parameters(), lr=1e-3)
     opt_p = optim.Adam(policy_p.parameters(), lr=1e-3)
-    criterion = nn.BCEWithLogitsLoss()
+    gamma = 0.99
 
-    for _ in range(iterations):
-        trajs = sample_trajectories(policy_e, policy_p, env, num_episodes=1)
-        # Placeholder discriminator loss (pursuer tries to classify success)
-        labels = torch.ones(1, 1, device=device)
-        output = torch.randn(1, 1, device=device)  # fake output
-        d_loss = criterion(output, labels)
+    for episode in range(iterations):
+        obs, _ = env.reset()
+        done = False
+        log_e, rew_e = [], []
+        log_p, rew_p = [], []
+
+        while not done:
+            obs_e = torch.tensor(obs['evader'], dtype=torch.float32, device=device)
+            obs_p = torch.tensor(obs['pursuer'], dtype=torch.float32, device=device)
+            mean_e = policy_e(obs_e)
+            mean_p = policy_p(obs_p)
+            dist_e = torch.distributions.Normal(mean_e, torch.ones_like(mean_e))
+            dist_p = torch.distributions.Normal(mean_p, torch.ones_like(mean_p))
+            a_e = dist_e.sample()
+            a_p = dist_p.sample()
+            obs, reward, done, _, _ = env.step({'evader': a_e.cpu().numpy(), 'pursuer': a_p.cpu().numpy()})
+            log_e.append(dist_e.log_prob(a_e).sum())
+            log_p.append(dist_p.log_prob(a_p).sum())
+            rew_e.append(reward['evader'])
+            rew_p.append(reward['pursuer'])
+
+        # compute discounted returns for both agents
+        returns_e, ret = [], 0.0
+        for r in reversed(rew_e):
+            ret = r + gamma * ret
+            returns_e.insert(0, ret)
+        returns_e = torch.tensor(returns_e, device=device)
+        returns_e = (returns_e - returns_e.mean()) / (returns_e.std() + 1e-8)
+
+        returns_p, ret = [], 0.0
+        for r in reversed(rew_p):
+            ret = r + gamma * ret
+            returns_p.insert(0, ret)
+        returns_p = torch.tensor(returns_p, device=device)
+        returns_p = (returns_p - returns_p.mean()) / (returns_p.std() + 1e-8)
+
+        loss_e = -(torch.stack(log_e) * returns_e).sum()
+        loss_p = -(torch.stack(log_p) * returns_p).sum()
+
+        opt_e.zero_grad()
+        loss_e.backward()
+        opt_e.step()
+
         opt_p.zero_grad()
-        d_loss.backward()
+        loss_p.backward()
         opt_p.step()
 
-        # Placeholder generator loss (evader tries to fool the pursuer)
-        g_loss = -d_loss
-        opt_e.zero_grad()
-        g_loss.backward()
-        opt_e.step()
+        if (episode + 1) % 10 == 0:
+            print(f"Episode {episode+1}: L_e={loss_e.item():.3f} L_p={loss_p.item():.3f}")
 
 
 def main():
