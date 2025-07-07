@@ -3,53 +3,29 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import gymnasium as gym
+import yaml
+import os
+
+
+
+def load_config(path: str | None = None) -> dict:
+    """Load configuration parameters from ``config.yaml``.
+
+    Parameters
+    ----------
+    path : str or None, optional
+        Optional path to a YAML configuration file. When ``None`` the
+        ``config.yaml`` next to this module is used.
+    """
+
+    if path is None:
+        path = os.path.join(os.path.dirname(__file__), "config.yaml")
+    with open(path, "r") as fh:
+        return yaml.safe_load(fh)
 
 
 # Global configuration dictionary for the environment and agents
-config = {
-    'evader': {
-        'mass': 500.0,
-        'max_acceleration': 20.0,
-        'top_speed': 300.0,
-        'drag_coefficient': 0.02,
-        'awareness_mode': 1,   # 1=unaware,2=vague,3=directional,4=full
-        'turn_rate': np.pi,    # rad/s
-        'up_vector': (0.0, 0.0, 1.0),
-        'stall_angle': np.deg2rad(60),  # max angle from up vector
-    },
-    'pursuer': {
-        'mass': 1000.0,
-        'max_acceleration': 30.0,
-        'top_speed': 350.0,
-        'drag_coefficient': 0.03,
-        'turn_rate': np.pi * 1.5,
-        'up_vector': (0.0, 0.0, 1.0),
-        'stall_angle': np.deg2rad(75),
-    },
-    'gravity': 9.81,
-    'time_step': 0.1,
-    'capture_radius': 1.0,
-    # weight applied to per-step shaping rewards
-    'shaping_weight': 0.05,
-    'target_position': (1000.0, 0.0, 0.0),
-    # parameters controlling the pursuer initial position and orientation
-    # The pursuer is sampled in a cone beneath the evader. "cone_half_angle"
-    # controls how wide the cone is, while the range limits specify how far
-    # from the evader (in metres) the pursuer can start. "force_target_radius"
-    # defines the radius of the sphere around the evader that the initial force
-    # vector will be pointed toward. These values influence how early or late
-    # interceptions can occur during an episode.
-    'pursuer_start': {
-        'cone_half_angle': np.deg2rad(45.0),
-        'min_range': 1000.0,
-        'max_range': 5000.0,
-        'force_target_radius': 500.0,
-        'initial_speed_range': (0.0, 50.0),
-    },
-    'initial_positions': {
-        'evader': (0.0, 0.0, 3000.0),
-    }
-}
+config = load_config()
 
 
 def sample_pursuer_start(evader_pos: np.ndarray, cfg: dict):
