@@ -5,9 +5,10 @@ import torch.nn as nn
 import torch.optim as optim
 import gymnasium as gym
 
-from pursuit_evasion import PursuitEvasionEnv, config, PursuerPolicy
+from pursuit_evasion import PursuitEvasionEnv, PursuerPolicy, load_config
 
-# Use an unaware evader
+# Load configuration and set the evader to be unaware
+config = load_config()
 config['evader']['awareness_mode'] = 1
 
 

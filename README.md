@@ -18,7 +18,7 @@ source .venv/bin/activate
 2. **Install dependencies**:
 
 ```bash
-pip install numpy torch gymnasium
+pip install numpy torch gymnasium pyyaml
 ```
 
 These are the only packages used in the example scripts.
@@ -56,3 +56,12 @@ python pursuit_evasion.py
 ```
 
 which is useful for quickly checking that the environment works.
+
+## Adjusting environment parameters
+
+All physical constants and environment options are stored in
+`config.yaml` in the repository root.  Simply edit this file to tweak
+values such as masses, maximum acceleration or the starting distance of
+the pursuer.  Both `pursuit_evasion.py` and `train_pursuer.py` load the
+configuration at runtime, so changes take effect the next time you run
+the scripts.
