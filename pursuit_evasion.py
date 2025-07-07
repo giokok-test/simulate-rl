@@ -81,9 +81,26 @@ def sample_pursuer_start(evader_pos: np.ndarray, cfg: dict):
 
 
 class PursuitEvasionEnv(gym.Env):
-    """Gym-compatible 3D pursuit-evasion environment."""
+    """Gym-compatible 3D pursuit-evasion environment.
+
+    The env simulates two aircraft-like agents. The evader attempts to reach
+    a target position while the pursuer tries to intercept it. All physics is
+    very simplified but captures the main constraints such as turn rate,
+    maximum acceleration and drag. Observations and actions are represented as
+    simple ``numpy`` arrays so the environment can be easily used with
+    standard RL libraries.
+    """
 
     def __init__(self, cfg: dict):
+        """Create the environment.
+
+        Parameters
+        ----------
+        cfg : dict
+            Configuration dictionary defining the physical parameters for the
+            evader and pursuer as well as some global environment options.
+        """
+
         super().__init__()
         self.cfg = cfg
         self.dt = cfg['time_step']
@@ -125,6 +142,13 @@ class PursuitEvasionEnv(gym.Env):
         self.reset()
 
     def reset(self, *, seed=None, options=None):
+        """Reset the environment state.
+
+        Returns the initial observation dictionary for both agents. The
+        pursuer spawn position is sampled randomly below the evader using
+        :func:`sample_pursuer_start`.
+        """
+
         super().reset(seed=seed)
         self.evader_pos = np.array(self.cfg['initial_positions']['evader'], dtype=np.float32)
         self.evader_vel = np.zeros(3, dtype=np.float32)
@@ -144,6 +168,15 @@ class PursuitEvasionEnv(gym.Env):
         return self._get_obs(), {}
 
     def step(self, action: dict):
+        """Update the environment one time step.
+
+        Parameters
+        ----------
+        action : dict
+            Dictionary with ``'evader'`` and ``'pursuer'`` keys mapping to
+            their respective action arrays.
+        """
+
         evader_action = np.array(action['evader'], dtype=np.float32)
         pursuer_action = np.array(action['pursuer'], dtype=np.float32)
         self._update_agent('evader', evader_action)
@@ -166,6 +199,8 @@ class PursuitEvasionEnv(gym.Env):
         return obs, reward, done, False, info
 
     def _update_agent(self, name: str, action: np.ndarray):
+        """Apply an action to either agent and integrate simple physics."""
+
         cfg_a = self.cfg[name]
         max_acc = cfg_a['max_acceleration']
         top_speed = cfg_a['top_speed']
@@ -193,6 +228,8 @@ class PursuitEvasionEnv(gym.Env):
         ], dtype=np.float32)
         target_dir /= np.linalg.norm(target_dir) + 1e-8
 
+        # Rotate current force direction toward the commanded direction, but
+        # clamp the amount of rotation by the agent turn rate
         angle_diff = np.arccos(np.clip(np.dot(dir_vec, target_dir), -1.0, 1.0))
         max_change = turn_rate * self.dt
         if angle_diff > max_change:
@@ -209,10 +246,13 @@ class PursuitEvasionEnv(gym.Env):
             self.pursuer_force_dir = new_dir
             self.pursuer_force_mag = mag
 
+        # Compute acceleration in world frame. Drag always opposes thrust and
+        # gravity only affects the evader.
         acc_cmd = new_dir * mag
         drag = -drag_c * new_dir
         acc_total = acc_cmd + drag + gravity
 
+        # Simple Euler integration of velocity and position
         vel[:] = vel + acc_total * self.dt
         speed = np.linalg.norm(vel)
         if speed > top_speed:
@@ -220,19 +260,22 @@ class PursuitEvasionEnv(gym.Env):
         pos[:] = pos + vel * self.dt
 
     def _check_done(self):
+        """Determine if the episode has terminated."""
         dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
         if dist <= self.cfg['capture_radius']:
             return True, -1.0, 1.0
-        # check impact with target
+        # check if the evader hit the ground near the target
         target = np.array(self.cfg['target_position'], dtype=np.float32)
         if (self.evader_pos[2] <= 0.0 and np.linalg.norm(self.evader_pos - target) < self.cfg['capture_radius'] * 5):
             return True, 1.0, -1.0
         return False, 0.0, 0.0
 
     def _get_obs(self):
+        """Assemble observations for both agents."""
+
         # pursuer observation: own pos/vel + evader pos
         obs_p = np.concatenate([self.pursuer_pos, self.pursuer_vel, self.evader_pos])
-        # evader observation
+        # evader observation starts with its own state and the target
         obs_elems = [self.evader_pos, self.evader_vel, self.cfg['target_position']]
         mode = self.cfg['evader'].get('awareness_mode', 1)
         if mode == 2:
