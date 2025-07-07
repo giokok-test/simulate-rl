@@ -18,10 +18,10 @@ source .venv/bin/activate
 2. **Install dependencies**:
 
 ```bash
-pip install numpy torch gymnasium
+pip install -r requirements.txt
 ```
 
-These are the only packages used in the example scripts.
+The `requirements.txt` file lists the packages used in the example scripts.
 
 ## Running the first training
 
