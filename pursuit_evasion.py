@@ -29,6 +29,8 @@ config = {
     'gravity': 9.81,
     'time_step': 0.1,
     'capture_radius': 1.0,
+    # weight applied to per-step shaping rewards
+    'shaping_weight': 0.05,
     'target_position': (1000.0, 0.0, 0.0),
     # parameters controlling the pursuer initial position and orientation
     # The pursuer is sampled in a cone beneath the evader. "cone_half_angle"
@@ -85,6 +87,7 @@ class PursuitEvasionEnv(gym.Env):
         super().__init__()
         self.cfg = cfg
         self.dt = cfg['time_step']
+        self.shaping_weight = cfg.get('shaping_weight', 0.05)
         # observation sizes depend on awareness mode
         self.evader_obs_dim = 9
         mode = cfg['evader'].get('awareness_mode', 1)
@@ -134,6 +137,10 @@ class PursuitEvasionEnv(gym.Env):
         self.pursuer_vel = p_vel.astype(np.float32)
         self.pursuer_force_dir = p_dir.astype(np.float32)
         self.pursuer_force_mag = 0.0
+        # record baseline distances for shaping rewards
+        self.prev_pe_dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
+        target = np.array(self.cfg['target_position'], dtype=np.float32)
+        self.prev_target_dist = np.linalg.norm(self.evader_pos - target)
         return self._get_obs(), {}
 
     def step(self, action: dict):
@@ -141,7 +148,18 @@ class PursuitEvasionEnv(gym.Env):
         pursuer_action = np.array(action['pursuer'], dtype=np.float32)
         self._update_agent('evader', evader_action)
         self._update_agent('pursuer', pursuer_action)
+        # shaping rewards based on change in distances
+        dist_pe = np.linalg.norm(self.evader_pos - self.pursuer_pos)
+        target = np.array(self.cfg['target_position'], dtype=np.float32)
+        dist_target = np.linalg.norm(self.evader_pos - target)
+        shape_p = self.prev_pe_dist - dist_pe
+        shape_e = self.prev_target_dist - dist_target
+        self.prev_pe_dist = dist_pe
+        self.prev_target_dist = dist_target
+
         done, r_e, r_p = self._check_done()
+        r_e += self.shaping_weight * shape_e
+        r_p += self.shaping_weight * shape_p
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
         info = {}
