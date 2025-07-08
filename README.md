@@ -31,6 +31,8 @@ pursuer while the evader follows a scripted behaviour. To start training run:
 ```bash
 python train_pursuer.py
 ```
+The script saves the trained policy to `pursuer_policy.pt` by default. You can
+override this with `--save-path`.
 
 The script accepts a few command line options to control the training. For
 instance, to run 200 episodes with a smaller learning rate and evaluation every
@@ -55,8 +57,9 @@ entropy bonus:
 ```bash
 python train_pursuer_ppo.py
 ```
-
-The command line options are the same as for ``train_pursuer.py``.
+The command line options are the same as for ``train_pursuer.py`` and the
+trained weights are written to ``pursuer_ppo.pt`` unless ``--save-path`` is
+specified.
 
 ## Additional scripts
 
@@ -68,6 +71,9 @@ python pursuit_evasion.py
 ```
 
 which is useful for quickly checking that the environment works.
+
+- `play.py` loads a saved policy and runs a single episode. Use the `--ppo`
+  flag when loading a model trained with the PPO script.
 
 ## Adjusting environment parameters
 
