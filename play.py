@@ -1,5 +1,8 @@
 import argparse
+import numpy as np
 import torch
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
 from pursuit_evasion import PursuerPolicy, load_config
 from train_pursuer import PursuerOnlyEnv
@@ -22,6 +25,10 @@ def run_episode(model_path: str, use_ppo: bool = False) -> None:
     model.eval()
 
     obs, _ = env.reset()
+    # collect positions for plotting
+    pursuer_traj = [env.env.pursuer_pos.copy()]
+    evader_traj = [env.env.evader_pos.copy()]
+
     done = False
     total_reward = 0.0
     while not done:
@@ -34,9 +41,24 @@ def run_episode(model_path: str, use_ppo: bool = False) -> None:
             dist = torch.distributions.Normal(mean, torch.ones_like(mean))
             action = dist.mean
         obs, r, done, _, _ = env.step(action.cpu().numpy())
+        pursuer_traj.append(env.env.pursuer_pos.copy())
+        evader_traj.append(env.env.evader_pos.copy())
         total_reward += r
 
     print(f"Episode reward: {total_reward:.2f}")
+
+    # Plot the trajectories in 3D
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+    p = np.stack(pursuer_traj)
+    e = np.stack(evader_traj)
+    ax.plot(p[:, 0], p[:, 1], p[:, 2], label="pursuer")
+    ax.plot(e[:, 0], e[:, 1], e[:, 2], label="evader")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+    ax.legend()
+    plt.show()
 
 
 if __name__ == "__main__":
