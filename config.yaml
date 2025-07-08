@@ -9,8 +9,10 @@ evader:
   drag_coefficient: 0.02
   # How much information the evader gets about the pursuer
   awareness_mode: 1
-  # Maximum rotation rate of the thrust vector [rad/s]
-  turn_rate: 3.141592653589793
+  # Maximum yaw rotation rate [rad/s]
+  yaw_rate: 3.141592653589793
+  # Maximum pitch rotation rate [rad/s]
+  pitch_rate: 3.141592653589793
   # Initial force direction
   up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [rad]
@@ -24,8 +26,10 @@ pursuer:
   top_speed: 350.0
   # Dimensionless coefficient modelling drag
   drag_coefficient: 0.03
-  # Maximum rotation rate of the thrust vector [rad/s]
-  turn_rate: 4.71238898038469
+  # Maximum yaw rotation rate [rad/s]
+  yaw_rate: 4.71238898038469
+  # Maximum pitch rotation rate [rad/s]
+  pitch_rate: 4.71238898038469
   # Initial force direction
   up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [rad]

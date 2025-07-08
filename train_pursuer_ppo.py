@@ -82,10 +82,11 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
         total = 0.0
         while not done:
             with torch.no_grad():
-                mean, _ = model(torch.tensor(obs))
+                obs_t = torch.tensor(obs, device=next(model.parameters()).device)
+                mean, _ = model(obs_t)
                 dist = torch.distributions.Normal(mean, torch.ones_like(mean))
                 action = dist.mean
-            obs, r, done, _, _ = env.step(action.numpy())
+            obs, r, done, _, _ = env.step(action.cpu().numpy())
             total += r
         rewards.append(total)
         if total > 0:
@@ -99,8 +100,9 @@ def train(cfg: dict):
     learning_rate = training_cfg.get('learning_rate', 1e-3)
     eval_freq = training_cfg.get('eval_freq', 10)
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = PursuerOnlyEnv(cfg)
-    model = ActorCritic(env.observation_space.shape[0])
+    model = ActorCritic(env.observation_space.shape[0]).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     gamma = 0.99
@@ -117,12 +119,12 @@ def train(cfg: dict):
         obs_list = []
         actions = []
         while not done:
-            obs_t = torch.tensor(obs, dtype=torch.float32)
+            obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
             mean, value = model(obs_t)
             dist = torch.distributions.Normal(mean, torch.ones_like(mean))
             action = dist.sample()
             log_prob = dist.log_prob(action).sum()
-            next_obs, r, done, _, _ = env.step(action.numpy())
+            next_obs, r, done, _, _ = env.step(action.cpu().numpy())
             log_probs.append(log_prob.detach())
             values.append(value.detach())
             rewards.append(r)
@@ -136,7 +138,7 @@ def train(cfg: dict):
         for r in reversed(rewards):
             G = r + gamma * G
             returns.insert(0, G)
-        returns = torch.tensor(returns, dtype=torch.float32)
+        returns = torch.tensor(returns, dtype=torch.float32, device=device)
         values_t = torch.stack(values)
         advantages = returns - values_t
 
@@ -175,6 +177,7 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", type=int, help="number of training episodes")
     parser.add_argument("--lr", type=float, help="optimizer learning rate")
     parser.add_argument("--eval-freq", type=int, help="how often to run evaluation")
+    parser.add_argument("--time-step", type=float, help="simulation time step override")
     args = parser.parse_args()
 
     training_cfg = config.setdefault(
@@ -186,5 +189,7 @@ if __name__ == "__main__":
         training_cfg['learning_rate'] = args.lr
     if args.eval_freq is not None:
         training_cfg['eval_freq'] = args.eval_freq
+    if args.time_step is not None:
+        config['time_step'] = args.time_step
 
     train(config)
