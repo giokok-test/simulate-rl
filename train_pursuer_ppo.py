@@ -1,0 +1,190 @@
+import argparse
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import gymnasium as gym
+
+from pursuit_evasion import (
+    PursuitEvasionEnv,
+    PursuerPolicy,
+    _make_mlp,
+    load_config,
+)
+
+# Load configuration and fix the evader policy
+config = load_config()
+config['evader']['awareness_mode'] = 1
+
+
+def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
+    """Evader accelerates toward the target."""
+    pos = env.evader_pos
+    target = np.array(env.cfg['target_position'], dtype=np.float32)
+    direction = target - pos
+    norm = np.linalg.norm(direction)
+    if norm > 1e-8:
+        direction /= norm
+    theta = np.arctan2(direction[1], direction[0])
+    phi = np.arccos(np.clip(direction[2], -1.0, 1.0))
+    phi = np.clip(phi, 0.0, env.cfg['evader']['stall_angle'])
+    mag = env.cfg['evader']['max_acceleration']
+    return np.array([mag, theta, phi], dtype=np.float32)
+
+
+class PursuerOnlyEnv(gym.Env):
+    """Environment exposing only the pursuer."""
+
+    def __init__(self, cfg: dict, max_steps: int = 20):
+        super().__init__()
+        self.env = PursuitEvasionEnv(cfg)
+        self.observation_space = self.env.observation_space['pursuer']
+        self.action_space = self.env.action_space['pursuer']
+        self.max_steps = max_steps
+        self.cur_step = 0
+
+    def reset(self, *, seed=None, options=None):
+        obs, info = self.env.reset(seed=seed)
+        self.cur_step = 0
+        return obs['pursuer'].astype(np.float32), info
+
+    def step(self, action: np.ndarray):
+        e_action = evader_policy(self.env)
+        obs, reward, done, truncated, info = self.env.step(
+            {'pursuer': action, 'evader': e_action}
+        )
+        self.cur_step += 1
+        if self.cur_step >= self.max_steps:
+            done = True
+        return obs['pursuer'].astype(np.float32), float(reward['pursuer']), done, truncated, info
+
+
+class ActorCritic(nn.Module):
+    """Small actor-critic network."""
+
+    def __init__(self, obs_dim: int):
+        super().__init__()
+        self.policy_net = _make_mlp(obs_dim, 3)
+        self.value_net = _make_mlp(obs_dim, 1)
+
+    def forward(self, obs: torch.Tensor):
+        mean = self.policy_net(obs)
+        value = self.value_net(obs).squeeze(-1)
+        return mean, value
+
+
+def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
+    rewards = []
+    successes = 0
+    for _ in range(episodes):
+        obs, _ = env.reset()
+        done = False
+        total = 0.0
+        while not done:
+            with torch.no_grad():
+                mean, _ = model(torch.tensor(obs))
+                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                action = dist.mean
+            obs, r, done, _, _ = env.step(action.numpy())
+            total += r
+        rewards.append(total)
+        if total > 0:
+            successes += 1
+    return float(np.mean(rewards)), successes / episodes
+
+
+def train(cfg: dict):
+    training_cfg = cfg.get('training', {})
+    num_episodes = training_cfg.get('episodes', 100)
+    learning_rate = training_cfg.get('learning_rate', 1e-3)
+    eval_freq = training_cfg.get('eval_freq', 10)
+
+    env = PursuerOnlyEnv(cfg)
+    model = ActorCritic(env.observation_space.shape[0])
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    gamma = 0.99
+    clip_ratio = 0.2
+    ppo_epochs = 4
+    entropy_coef = 0.01
+
+    for episode in range(num_episodes):
+        obs, _ = env.reset()
+        done = False
+        log_probs = []
+        values = []
+        rewards = []
+        obs_list = []
+        actions = []
+        while not done:
+            obs_t = torch.tensor(obs, dtype=torch.float32)
+            mean, value = model(obs_t)
+            dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+            action = dist.sample()
+            log_prob = dist.log_prob(action).sum()
+            next_obs, r, done, _, _ = env.step(action.numpy())
+            log_probs.append(log_prob.detach())
+            values.append(value.detach())
+            rewards.append(r)
+            obs_list.append(obs_t)
+            actions.append(action)
+            obs = next_obs
+
+        # compute returns and advantages
+        returns = []
+        G = 0.0
+        for r in reversed(rewards):
+            G = r + gamma * G
+            returns.insert(0, G)
+        returns = torch.tensor(returns, dtype=torch.float32)
+        values_t = torch.stack(values)
+        advantages = returns - values_t
+
+        obs_batch = torch.stack(obs_list)
+        action_batch = torch.stack(actions)
+        old_log_probs = torch.stack(log_probs)
+
+        for _ in range(ppo_epochs):
+            mean, value = model(obs_batch)
+            dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+            log_probs_new = dist.log_prob(action_batch).sum(dim=1)
+            entropy = dist.entropy().sum(dim=1)
+            ratio = torch.exp(log_probs_new - old_log_probs)
+            surr1 = ratio * advantages
+            surr2 = torch.clamp(ratio, 1.0 - clip_ratio, 1.0 + clip_ratio) * advantages
+            actor_loss = -torch.min(surr1, surr2).mean()
+            critic_loss = (returns - value).pow(2).mean()
+            loss = actor_loss + 0.5 * critic_loss - entropy_coef * entropy.mean()
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        if (episode + 1) % eval_freq == 0:
+            avg_r, success = evaluate(model, PursuerOnlyEnv(cfg))
+            print(
+                f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}"
+            )
+
+    avg_r, success = evaluate(model, PursuerOnlyEnv(cfg))
+    print(f"Final performance: avg_reward={avg_r:.2f} success={success:.2f}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train the pursuer policy using PPO")
+    parser.add_argument("--episodes", type=int, help="number of training episodes")
+    parser.add_argument("--lr", type=float, help="optimizer learning rate")
+    parser.add_argument("--eval-freq", type=int, help="how often to run evaluation")
+    args = parser.parse_args()
+
+    training_cfg = config.setdefault(
+        'training', {'episodes': 100, 'learning_rate': 1e-3, 'eval_freq': 10}
+    )
+    if args.episodes is not None:
+        training_cfg['episodes'] = args.episodes
+    if args.lr is not None:
+        training_cfg['learning_rate'] = args.lr
+    if args.eval_freq is not None:
+        training_cfg['eval_freq'] = args.eval_freq
+
+    train(config)

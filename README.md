@@ -46,6 +46,18 @@ The defaults for these options live in ``pursuit_evasion.py`` under
 It will print evaluation statistics every ``--eval-freq`` episodes and a final
 summary when training finishes.
 
+### PPO variant
+
+For a more stable actor--critic approach, run the ``train_pursuer_ppo.py``
+script which implements a minimal Proximal Policy Optimization loop with an
+entropy bonus:
+
+```bash
+python train_pursuer_ppo.py
+```
+
+The command line options are the same as for ``train_pursuer.py``.
+
 ## Additional scripts
 
 - `pursuit_evasion.py` contains the environment implementation along with a
