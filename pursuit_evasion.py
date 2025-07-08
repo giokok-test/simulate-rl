@@ -181,7 +181,8 @@ class PursuitEvasionEnv(gym.Env):
         max_acc = cfg_a['max_acceleration']
         top_speed = cfg_a['top_speed']
         drag_c = cfg_a['drag_coefficient']
-        turn_rate = cfg_a['turn_rate']
+        yaw_rate = cfg_a.get('yaw_rate', cfg_a.get('turn_rate', 0.0))
+        pitch_rate = cfg_a.get('pitch_rate', cfg_a.get('turn_rate', 0.0))
         stall = cfg_a['stall_angle']
         if name == 'evader':
             pos = self.evader_pos
@@ -204,16 +205,23 @@ class PursuitEvasionEnv(gym.Env):
         ], dtype=np.float32)
         target_dir /= np.linalg.norm(target_dir) + 1e-8
 
-        # Rotate current force direction toward the commanded direction, but
-        # clamp the amount of rotation by the agent turn rate
-        angle_diff = np.arccos(np.clip(np.dot(dir_vec, target_dir), -1.0, 1.0))
-        max_change = turn_rate * self.dt
-        if angle_diff > max_change:
-            ratio = max_change / (angle_diff + 1e-8)
-            new_dir = dir_vec * (1 - ratio) + target_dir * ratio
-            new_dir /= np.linalg.norm(new_dir) + 1e-8
-        else:
-            new_dir = target_dir
+        # Rotate current force direction toward the commanded yaw/pitch angles
+        # separately, respecting independent turn rates
+        cur_yaw = np.arctan2(dir_vec[1], dir_vec[0])
+        cur_pitch = np.arccos(np.clip(dir_vec[2], -1.0, 1.0))
+        yaw_diff = np.arctan2(np.sin(theta - cur_yaw), np.cos(theta - cur_yaw))
+        pitch_diff = phi - cur_pitch
+        max_yaw = yaw_rate * self.dt
+        max_pitch = pitch_rate * self.dt
+        new_yaw = cur_yaw + np.clip(yaw_diff, -max_yaw, max_yaw)
+        new_pitch = cur_pitch + np.clip(pitch_diff, -max_pitch, max_pitch)
+        new_pitch = np.clip(new_pitch, 0.0, stall)
+        new_dir = np.array([
+            np.sin(new_pitch) * np.cos(new_yaw),
+            np.sin(new_pitch) * np.sin(new_yaw),
+            np.cos(new_pitch),
+        ], dtype=np.float32)
+        new_dir /= np.linalg.norm(new_dir) + 1e-8
 
         if name == 'evader':
             self.evader_force_dir = new_dir
