@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import gymnasium as gym
+from typing import Optional
 
 from pursuit_evasion import PursuitEvasionEnv, PursuerPolicy, load_config
 
@@ -83,7 +84,7 @@ def evaluate(policy: PursuerPolicy, env: PursuerOnlyEnv, episodes: int = 5) -> t
     return float(np.mean(rewards)), successes / episodes
 
 
-def train(cfg: dict):
+def train(cfg: dict, save_path: Optional[str] = None):
     """Train the pursuer policy with REINFORCE.
 
     Parameters
@@ -140,6 +141,10 @@ def train(cfg: dict):
     avg_r, success = evaluate(policy, PursuerOnlyEnv(config))
     print(f"Final performance: avg_reward={avg_r:.2f} success={success:.2f}")
 
+    if save_path is not None:
+        torch.save(policy.state_dict(), save_path)
+        print(f"Model saved to {save_path}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the pursuer policy")
@@ -151,6 +156,9 @@ if __name__ == "__main__":
                         help="how often to run evaluation episodes")
     parser.add_argument("--time-step", type=float,
                         help="simulation time step override")
+    parser.add_argument("--save-path", type=str,
+                        default="pursuer_policy.pt",
+                        help="where to store the trained weights")
     args = parser.parse_args()
 
     training_cfg = config.setdefault('training', {
@@ -167,4 +175,4 @@ if __name__ == "__main__":
     if args.time_step is not None:
         config['time_step'] = args.time_step
 
-    train(config)
+    train(config, save_path=args.save_path)
