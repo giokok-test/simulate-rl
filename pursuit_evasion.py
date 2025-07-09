@@ -136,10 +136,19 @@ class PursuitEvasionEnv(gym.Env):
         """
 
         super().reset(seed=seed)
-        self.evader_pos = np.array(self.cfg['initial_positions']['evader'], dtype=np.float32)
+        start_cfg = self.cfg.get('evader_start', {})
+        dmin, dmax = start_cfg.get('distance_range', [0.0, 0.0])
+        altitude = start_cfg.get('altitude', 3000.0)
+        target = np.array(self.cfg['target_position'], dtype=np.float32)
+        dist = np.random.uniform(dmin, dmax)
+        ang = np.random.uniform(0.0, 2 * np.pi)
+        start_xy = target[:2] + dist * np.array([np.cos(ang), np.sin(ang)], dtype=np.float32)
+        self.evader_pos = np.array([start_xy[0], start_xy[1], altitude], dtype=np.float32)
         self.evader_vel = np.zeros(3, dtype=np.float32)
-        self.evader_force_dir = np.array(self.cfg['evader']['up_vector'], dtype=np.float32)
-        self.evader_force_dir /= np.linalg.norm(self.evader_force_dir) + 1e-8
+        dir_xy = target[:2] - start_xy
+        dir_vec = np.array([dir_xy[0], dir_xy[1], 0.0], dtype=np.float32)
+        dir_vec /= np.linalg.norm(dir_vec) + 1e-8
+        self.evader_force_dir = dir_vec
         self.evader_force_mag = 0.0
 
         p_pos, p_vel, p_dir = sample_pursuer_start(self.evader_pos, self.cfg)
