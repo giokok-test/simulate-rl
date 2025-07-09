@@ -160,6 +160,9 @@ class PursuitEvasionEnv(gym.Env):
         self.prev_pe_dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
         target = np.array(self.cfg['target_position'], dtype=np.float32)
         self.prev_target_dist = np.linalg.norm(self.evader_pos - target)
+        # metrics for episode statistics
+        self.min_pe_dist = self.prev_pe_dist
+        self.cur_step = 0
         return self._get_obs(), {}
 
     def step(self, action: dict):
@@ -180,6 +183,7 @@ class PursuitEvasionEnv(gym.Env):
         dist_pe = np.linalg.norm(self.evader_pos - self.pursuer_pos)
         target = np.array(self.cfg['target_position'], dtype=np.float32)
         dist_target = np.linalg.norm(self.evader_pos - target)
+        self.min_pe_dist = min(self.min_pe_dist, dist_pe)
         shape_p = self.prev_pe_dist - dist_pe
         shape_e = self.prev_target_dist - dist_target
         self.prev_pe_dist = dist_pe
@@ -191,6 +195,19 @@ class PursuitEvasionEnv(gym.Env):
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
         info = {}
+        if done:
+            info = {
+                'episode_steps': self.cur_step + 1,
+                'min_distance': float(self.min_pe_dist),
+                'final_distance': float(dist_pe),
+                'evader_to_target': float(dist_target),
+            }
+            if dist_pe <= self.cfg['capture_radius']:
+                info['outcome'] = 'capture'
+            elif self.evader_pos[2] <= 0.0 and dist_target < self.cfg['capture_radius'] * 5:
+                info['outcome'] = 'evader_target'
+
+        self.cur_step += 1
         return obs, reward, done, False, info
 
     def _update_agent(self, name: str, action: np.ndarray):

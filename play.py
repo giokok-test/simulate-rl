@@ -31,6 +31,7 @@ def run_episode(model_path: str, use_ppo: bool = False) -> None:
 
     done = False
     total_reward = 0.0
+    info = {}
     while not done:
         with torch.no_grad():
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
@@ -40,12 +41,20 @@ def run_episode(model_path: str, use_ppo: bool = False) -> None:
                 mean = model(obs_t)
             dist = torch.distributions.Normal(mean, torch.ones_like(mean))
             action = dist.mean
-        obs, r, done, _, _ = env.step(action.cpu().numpy())
+        obs, r, done, _, info = env.step(action.cpu().numpy())
         pursuer_traj.append(env.env.pursuer_pos.copy())
         evader_traj.append(env.env.evader_pos.copy())
         total_reward += r
 
     print(f"Episode reward: {total_reward:.2f}")
+    if info:
+        min_d = info.get('min_distance')
+        closest = f"{min_d:.2f}" if min_d is not None else "n/a"
+        print(
+            f"Steps: {info.get('episode_steps', 'n/a')}  "
+            f"closest={closest}  "
+            f"outcome={info.get('outcome', 'unknown')}"
+        )
 
     # Plot the trajectories in 3D
     fig = plt.figure()
