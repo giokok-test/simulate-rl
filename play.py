@@ -9,10 +9,10 @@ from train_pursuer import PursuerOnlyEnv
 from train_pursuer_ppo import ActorCritic
 
 
-def run_episode(model_path: str, use_ppo: bool = False) -> None:
+def run_episode(model_path: str, use_ppo: bool = False, max_steps: int = 20) -> None:
     cfg = load_config()
     cfg['evader']['awareness_mode'] = 1
-    env = PursuerOnlyEnv(cfg)
+    env = PursuerOnlyEnv(cfg, max_steps=max_steps)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if use_ppo:
@@ -94,6 +94,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ppo", action="store_true", help="load weights from PPO training"
     )
+    parser.add_argument(
+        "--steps",
+        type=int,
+        default=60,
+        help="maximum number of steps before timing out",
+    )
     args = parser.parse_args()
 
-    run_episode(args.model, use_ppo=args.ppo)
+    run_episode(args.model, use_ppo=args.ppo, max_steps=args.steps)
