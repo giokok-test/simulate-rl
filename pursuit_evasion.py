@@ -90,7 +90,8 @@ class PursuitEvasionEnv(gym.Env):
             self.evader_obs_dim += 3  # directional unit vector
         elif mode >= 4:
             self.evader_obs_dim += 3  # pursuer position
-        self.pursuer_obs_dim = 9  # pursuer observes evader position
+        # pursuer observes evader position and explicit direction
+        self.pursuer_obs_dim = 12
 
         self.observation_space = gym.spaces.Dict({
             'pursuer': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.pursuer_obs_dim,), dtype=np.float32),
@@ -257,8 +258,15 @@ class PursuitEvasionEnv(gym.Env):
     def _get_obs(self):
         """Assemble observations for both agents."""
 
-        # pursuer observation: own pos/vel + evader pos
-        obs_p = np.concatenate([self.pursuer_pos, self.pursuer_vel, self.evader_pos])
+        # pursuer observation: own state, evader position and normalized direction
+        direction_pe = self.evader_pos - self.pursuer_pos
+        norm_pe = np.linalg.norm(direction_pe) + 1e-8
+        obs_p = np.concatenate([
+            self.pursuer_pos,
+            self.pursuer_vel,
+            self.evader_pos,
+            direction_pe / norm_pe,
+        ])
         # evader observation starts with its own state and the target
         obs_elems = [self.evader_pos, self.evader_vel, self.cfg['target_position']]
         mode = self.cfg['evader'].get('awareness_mode', 1)
