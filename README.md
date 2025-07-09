@@ -83,3 +83,14 @@ values such as masses, maximum acceleration or the starting distance of
 the pursuer.  Both `pursuit_evasion.py` and `train_pursuer.py` load the
 configuration at runtime, so changes take effect the next time you run
 the scripts.
+
+The `evader.awareness_mode` option defines how much information the
+evader receives about the pursuer:
+
+1. `1` – no knowledge of the pursuer
+2. `2` – only the distance to the pursuer
+3. `3` – the unit vector pointing to the pursuer
+4. `4` – full pursuer position (values above 4 behave the same)
+
+The `yaw_rate` and `pitch_rate` values for both agents are specified in
+degrees per second and are converted internally to radians per second.

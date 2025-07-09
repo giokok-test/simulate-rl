@@ -182,8 +182,8 @@ class PursuitEvasionEnv(gym.Env):
         max_acc = cfg_a['max_acceleration']
         top_speed = cfg_a['top_speed']
         drag_c = cfg_a['drag_coefficient']
-        yaw_rate = cfg_a.get('yaw_rate', cfg_a.get('turn_rate', 0.0))
-        pitch_rate = cfg_a.get('pitch_rate', cfg_a.get('turn_rate', 0.0))
+        yaw_rate = np.deg2rad(cfg_a.get('yaw_rate', cfg_a.get('turn_rate', 0.0)))
+        pitch_rate = np.deg2rad(cfg_a.get('pitch_rate', cfg_a.get('turn_rate', 0.0)))
         stall = cfg_a['stall_angle']
         if name == 'evader':
             pos = self.evader_pos
