@@ -115,6 +115,21 @@ def main():
     fig.text(0.25, 0.95, pursuer_txt, fontsize=9, va="top")
     fig.text(0.5, 0.95, global_txt, fontsize=9, va="top")
 
+    # ensure the 3D plot uses the same scale on all axes
+    try:
+        ax.set_box_aspect([1, 1, 1])
+    except AttributeError:  # for older matplotlib versions
+        limits = np.array([
+            ax.get_xlim3d(),
+            ax.get_ylim3d(),
+            ax.get_zlim3d(),
+        ])
+        radius = (limits[:, 1] - limits[:, 0]).max() / 2
+        centers = limits.mean(axis=1)
+        ax.set_xlim(centers[0] - radius, centers[0] + radius)
+        ax.set_ylim(centers[1] - radius, centers[1] + radius)
+        ax.set_zlim(centers[2] - radius, centers[2] + radius)
+
     plt.tight_layout()
     plt.show()
 
