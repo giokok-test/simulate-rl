@@ -1,6 +1,6 @@
 evader:
   # Mass of the evader aircraft [kg]
-  mass: 500.0
+  mass: 1500.0
   # Maximum acceleration magnitude the evader can command [m/s^2]
   max_acceleration: 20.0
   # Upper speed limit [m/s]
@@ -14,16 +14,16 @@ evader:
   #   4 - full pursuer position is known (values >4 behave the same)
   awareness_mode: 1
   # Maximum yaw rotation rate [deg/s]
-  yaw_rate: 180.0
+  yaw_rate: 5
   # Maximum pitch rotation rate [deg/s]
-  pitch_rate: 180.0
+  pitch_rate: 10
   # Initial force direction
   up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [deg]
-  stall_angle: 60.0
+  stall_angle: 45.0
 pursuer:
   # Mass of the pursuer [kg]
-  mass: 1000.0
+  mass: 100.0
   # Maximum acceleration magnitude [m/s^2]
   max_acceleration: 30.0
   # Upper speed limit [m/s]
@@ -31,13 +31,13 @@ pursuer:
   # Dimensionless coefficient modelling drag
   drag_coefficient: 0.03
   # Maximum yaw rotation rate [deg/s]
-  yaw_rate: 270.0
+  yaw_rate: 10.0
   # Maximum pitch rotation rate [deg/s]
-  pitch_rate: 270.0
+  pitch_rate: 15.0
   # Initial force direction
   up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [deg]
-  stall_angle: 75.0
+  stall_angle: 55.0
 # Downward gravitational acceleration [m/s^2]
 gravity: 9.81
 # Simulation time step [s]
