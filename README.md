@@ -75,6 +75,13 @@ which is useful for quickly checking that the environment works.
 - `play.py` loads a saved policy and runs a single episode. Use the `--ppo`
   flag when loading a model trained with the PPO script.
 
+The environment stores several statistics for each episode. When an episode
+finishes the ``info`` dictionary returned from ``env.step`` contains the
+closest pursuer--evader distance, number of steps and outcome (capture,
+evader reaching the target or timeout). The evaluation helpers in the training
+scripts print the average minimum distance and episode length during
+periodic evaluations.
+
 ## Adjusting environment parameters
 
 All physical constants and environment options are stored in

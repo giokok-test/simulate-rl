@@ -53,8 +53,15 @@ class PursuerOnlyEnv(gym.Env):
         e_action = evader_policy(self.env)
         obs, reward, done, truncated, info = self.env.step({'pursuer': action, 'evader': e_action})
         self.cur_step += 1
-        if self.cur_step >= self.max_steps:
+        if self.cur_step >= self.max_steps and not done:
             done = True
+            info.setdefault('episode_steps', self.cur_step)
+            info.setdefault('min_distance', float(self.env.min_pe_dist))
+            info.setdefault('final_distance', float(np.linalg.norm(self.env.evader_pos - self.env.pursuer_pos)))
+            target = np.array(self.env.cfg['target_position'], dtype=np.float32)
+            dist_target = np.linalg.norm(self.env.evader_pos - target)
+            info.setdefault('evader_to_target', float(dist_target))
+            info['outcome'] = 'timeout'
         return obs['pursuer'].astype(np.float32), float(reward['pursuer']), done, truncated, info
 
 
@@ -69,18 +76,30 @@ def evaluate(policy: PursuerPolicy, env: PursuerOnlyEnv, episodes: int = 5) -> t
 
     rewards = []
     successes = 0
+    min_dists = []
+    steps = []
     for _ in range(episodes):
         obs, _ = env.reset()
         done = False
         total = 0.0
+        info = {}
         while not done:
             with torch.no_grad():
                 action = policy(torch.tensor(obs, device=next(policy.parameters()).device))
-            obs, r, done, _, _ = env.step(action.cpu().numpy())
+            obs, r, done, _, info = env.step(action.cpu().numpy())
             total += r
         rewards.append(total)
         if total > 0:
             successes += 1
+        if info:
+            min_dists.append(info.get('min_distance', np.nan))
+            steps.append(info.get('episode_steps', np.nan))
+
+    if min_dists:
+        print(
+            f"    eval metrics: mean_min_dist={np.nanmean(min_dists):.2f} "
+            f"mean_steps={np.nanmean(steps):.1f}"
+        )
     return float(np.mean(rewards)), successes / episodes
 
 
