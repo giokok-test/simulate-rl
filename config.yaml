@@ -48,6 +48,11 @@ capture_radius: 1.0
 shaping_weight: 0.05
 # Coordinates of the evader's goal [m]
 target_position: [1000.0, 0.0, 0.0]
+evader_start:
+  # Range of initial horizontal distance from the goal [m]
+  distance_range: [800.0, 1200.0]
+  # Starting altitude [m]
+  altitude: 3000.0
 pursuer_start:
   # Maximum half angle of the pursuer spawn cone [rad]
   cone_half_angle: 0.7853981633974483
@@ -59,6 +64,3 @@ pursuer_start:
   force_target_radius: 500.0
   # Range of random initial speeds [m/s]
   initial_speed_range: [0.0, 50.0]
-initial_positions:
-  # Starting position of the evader [m]
-  evader: [0.0, 0.0, 3000.0]
