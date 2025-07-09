@@ -63,6 +63,46 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int = 20) -> 
     e = np.stack(evader_traj)
     ax.plot(p[:, 0], p[:, 1], p[:, 2], label="pursuer")
     ax.plot(e[:, 0], e[:, 1], e[:, 2], label="evader")
+    # mark the evader's target position
+    target = np.asarray(env.env.cfg["target_position"], dtype=float)
+    ax.scatter(*target, color="red", marker="*", s=100, label="goal")
+    # mark starting and final positions for both agents
+    ax.scatter(
+        p[0, 0],
+        p[0, 1],
+        p[0, 2],
+        color="blue",
+        marker="o",
+        s=60,
+        label="pursuer start",
+    )
+    ax.scatter(
+        e[0, 0],
+        e[0, 1],
+        e[0, 2],
+        color="orange",
+        marker="o",
+        s=60,
+        label="evader start",
+    )
+    ax.scatter(
+        p[-1, 0],
+        p[-1, 1],
+        p[-1, 2],
+        color="blue",
+        marker="X",
+        s=80,
+        label="pursuer end",
+    )
+    ax.scatter(
+        e[-1, 0],
+        e[-1, 1],
+        e[-1, 2],
+        color="orange",
+        marker="X",
+        s=80,
+        label="evader end",
+    )
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_zlabel("z")

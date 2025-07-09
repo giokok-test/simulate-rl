@@ -75,6 +75,8 @@ which is useful for quickly checking that the environment works.
 - `play.py` loads a saved policy and runs a single episode. Use the `--ppo`
   flag when loading a model trained with the PPO script. The `--steps` option
   controls how many simulation steps are executed before declaring a timeout.
+  The plot now highlights the starting and final positions of both agents and
+  marks the evader's goal position.
 
 The environment stores several statistics for each episode. When an episode
 finishes the ``info`` dictionary returned from ``env.step`` contains the
