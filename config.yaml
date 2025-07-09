@@ -8,11 +8,15 @@ evader:
   # Dimensionless coefficient modelling drag
   drag_coefficient: 0.02
   # How much information the evader gets about the pursuer
+  #   1 - evader has no knowledge of the pursuer
+  #   2 - only the distance to the pursuer is observed
+  #   3 - evader receives the unit vector pointing to the pursuer
+  #   4 - full pursuer position is known (values >4 behave the same)
   awareness_mode: 1
-  # Maximum yaw rotation rate [rad/s]
-  yaw_rate: 3.141592653589793
-  # Maximum pitch rotation rate [rad/s]
-  pitch_rate: 3.141592653589793
+  # Maximum yaw rotation rate [deg/s]
+  yaw_rate: 180.0
+  # Maximum pitch rotation rate [deg/s]
+  pitch_rate: 180.0
   # Initial force direction
   up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [rad]
@@ -26,10 +30,10 @@ pursuer:
   top_speed: 350.0
   # Dimensionless coefficient modelling drag
   drag_coefficient: 0.03
-  # Maximum yaw rotation rate [rad/s]
-  yaw_rate: 4.71238898038469
-  # Maximum pitch rotation rate [rad/s]
-  pitch_rate: 4.71238898038469
+  # Maximum yaw rotation rate [deg/s]
+  yaw_rate: 270.0
+  # Maximum pitch rotation rate [deg/s]
+  pitch_rate: 270.0
   # Initial force direction
   up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [rad]
