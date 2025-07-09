@@ -94,3 +94,5 @@ evader receives about the pursuer:
 
 The `yaw_rate` and `pitch_rate` values for both agents are specified in
 degrees per second and are converted internally to radians per second.
+Similarly, the `stall_angle` parameter in `config.yaml` is given in
+degrees but converted to radians when the environment loads.

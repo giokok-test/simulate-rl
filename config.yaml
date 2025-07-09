@@ -19,8 +19,8 @@ evader:
   pitch_rate: 180.0
   # Initial force direction
   up_vector: [0.0, 0.0, 1.0]
-  # Maximum allowable pitch angle [rad]
-  stall_angle: 1.0471975511965976
+  # Maximum allowable pitch angle [deg]
+  stall_angle: 60.0
 pursuer:
   # Mass of the pursuer [kg]
   mass: 1000.0
@@ -36,8 +36,8 @@ pursuer:
   pitch_rate: 270.0
   # Initial force direction
   up_vector: [0.0, 0.0, 1.0]
-  # Maximum allowable pitch angle [rad]
-  stall_angle: 1.3089969389957472
+  # Maximum allowable pitch angle [deg]
+  stall_angle: 75.0
 # Downward gravitational acceleration [m/s^2]
 gravity: 9.81
 # Simulation time step [s]

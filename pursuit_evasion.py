@@ -5,6 +5,7 @@ import torch.optim as optim
 import gymnasium as gym
 import yaml
 import os
+import copy
 
 
 
@@ -78,9 +79,17 @@ class PursuitEvasionEnv(gym.Env):
         """
 
         super().__init__()
-        self.cfg = cfg
-        self.dt = cfg['time_step']
-        self.shaping_weight = cfg.get('shaping_weight', 0.05)
+        # Make a copy so we can modify units without affecting the caller
+        self.cfg = copy.deepcopy(cfg)
+        self.dt = self.cfg['time_step']
+        self.shaping_weight = self.cfg.get('shaping_weight', 0.05)
+        # Convert stall angles provided in degrees to radians once
+        self.cfg['evader']['stall_angle'] = np.deg2rad(
+            self.cfg['evader']['stall_angle']
+        )
+        self.cfg['pursuer']['stall_angle'] = np.deg2rad(
+            self.cfg['pursuer']['stall_angle']
+        )
         # observation sizes depend on awareness mode
         self.evader_obs_dim = 9
         mode = cfg['evader'].get('awareness_mode', 1)
