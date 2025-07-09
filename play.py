@@ -67,6 +67,20 @@ def run_episode(model_path: str, use_ppo: bool = False) -> None:
     ax.set_ylabel("y")
     ax.set_zlabel("z")
     ax.legend()
+    # keep all three axes scaled equally so movement is not distorted
+    try:
+        ax.set_box_aspect([1, 1, 1])
+    except AttributeError:  # matplotlib < 3.3 fallback
+        limits = np.array([
+            ax.get_xlim3d(),
+            ax.get_ylim3d(),
+            ax.get_zlim3d(),
+        ])
+        radius = (limits[:, 1] - limits[:, 0]).max() / 2
+        centers = limits.mean(axis=1)
+        ax.set_xlim(centers[0] - radius, centers[0] + radius)
+        ax.set_ylim(centers[1] - radius, centers[1] + radius)
+        ax.set_zlim(centers[2] - radius, centers[2] + radius)
     plt.show()
 
 
