@@ -13,6 +13,28 @@ config = load_config()
 config['evader']['awareness_mode'] = 1
 
 
+def _format_step(env: PursuerOnlyEnv, step: int, target: np.ndarray) -> str:
+    """Return formatted row for the table shown in ``play.py``."""
+
+    pe_vec = env.env.evader_pos - env.env.pursuer_pos
+    et_vec = target - env.env.evader_pos
+    pv = env.env.pursuer_vel
+    ev = env.env.evader_vel
+    pv_u = pv / (np.linalg.norm(pv) + 1e-8)
+    ev_u = ev / (np.linalg.norm(ev) + 1e-8)
+    pe_u = pe_vec / (np.linalg.norm(pe_vec) + 1e-8)
+    return (
+        f"{step:5d} | "
+        f"[{pe_vec[0]:7.1f} {pe_vec[1]:7.1f} {pe_vec[2]:7.1f}] | "
+        f"[{et_vec[0]:7.1f} {et_vec[1]:7.1f} {et_vec[2]:7.1f}] | "
+        f"[{pv[0]:7.1f} {pv[1]:7.1f} {pv[2]:7.1f}] | "
+        f"[{ev[0]:7.1f} {ev[1]:7.1f} {ev[2]:7.1f}] | "
+        f"[{pv_u[0]:6.2f} {pv_u[1]:6.2f} {pv_u[2]:6.2f}] | "
+        f"[{ev_u[0]:6.2f} {ev_u[1]:6.2f} {ev_u[2]:6.2f}] | "
+        f"[{pe_u[0]:6.2f} {pe_u[1]:6.2f} {pe_u[2]:6.2f}]"
+    )
+
+
 def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
     """Evader accelerates toward the target."""
     pos = env.evader_pos
@@ -131,6 +153,13 @@ def train(cfg: dict, save_path: Optional[str] = None):
     optimizer = optim.Adam(policy.parameters(), lr=learning_rate)
     gamma = 0.99
 
+    header = (
+        f"{'step':>5} | {'pursuer→evader [m]':>26} | "
+        f"{'evader→target [m]':>26} | {'pursuer vel [m/s]':>26} | "
+        f"{'evader vel [m/s]':>26} | {'p dir':>18} | {'e dir':>18} | "
+        f"{'p→e dir':>18}"
+    )
+
     for episode in range(num_episodes):
         # Collect one episode of experience
         obs, _ = env.reset()
@@ -139,6 +168,10 @@ def train(cfg: dict, save_path: Optional[str] = None):
         done = False
         info = {}
         start_d = env.start_distance
+        target = np.asarray(env.env.cfg["target_position"], dtype=float)
+        first_rows: list[str] = []
+        last_rows: list[str] = []
+        step = 0
         while not done:
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
             mean = policy(obs_t)
@@ -148,6 +181,13 @@ def train(cfg: dict, save_path: Optional[str] = None):
             obs, r, done, _, info = env.step(action.cpu().numpy())
             log_probs.append(log_prob)
             rewards.append(r)
+            row = _format_step(env, step, target)
+            if len(first_rows) < 3:
+                first_rows.append(row)
+            if len(last_rows) >= 3:
+                last_rows.pop(0)
+            last_rows.append(row)
+            step += 1
         # Compute discounted returns
         returns = []
         G = 0.0
@@ -160,6 +200,13 @@ def train(cfg: dict, save_path: Optional[str] = None):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
+        print(header)
+        print("-" * len(header))
+        for row in first_rows:
+            print(row)
+        for row in last_rows:
+            print(row)
         if info:
             print(
                 f"Episode {episode+1}: outcome={info.get('outcome', 'timeout')} "
