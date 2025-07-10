@@ -28,12 +28,21 @@ def draw_cone(ax, apex, angle, r_min, r_max, **kw):
         ax.plot(x, y, z, **kw)
 
 
-def draw_spawn_volume(ax, apex, inner, outer, r_min, r_max, yaw_ranges, *, color="green", alpha=0.15, linestyle="--"):
-    """Visualise the pursuer spawn volume.
+def draw_spawn_volume(
+    ax,
+    apex,
+    inner,
+    outer,
+    r_min,
+    r_max,
+    yaw_ranges,
+    *,
+    color="green",
+    alpha=0.15,
+    linestyle="--",
+):
+    """Visualise the pursuer spawn volume as closed translucent surfaces."""
 
-    The function draws the cone boundaries as lines and also shades the volume
-    using translucent polygon surfaces.
-    """
     line_kw = {"color": color, "linestyle": linestyle}
     for yaw_start, yaw_end in yaw_ranges:
         theta = np.linspace(yaw_start, yaw_end, 30)
@@ -58,21 +67,51 @@ def draw_spawn_volume(ax, apex, inner, outer, r_min, r_max, yaw_ranges, *, color
                 z = apex[2] - np.array([r_min, r_max]) * np.cos(inner)
                 ax.plot(x, y, z, **line_kw)
 
-        # shaded volume for this wedge
-        theta_s = np.linspace(yaw_start, yaw_end, 15)
-        r_s = np.linspace(r_min, r_max, 2)
-        theta_grid, r_grid = np.meshgrid(theta_s, r_s)
-        x = apex[0] + r_grid * np.sin(outer) * np.cos(theta_grid)
-        y = apex[1] + r_grid * np.sin(outer) * np.sin(theta_grid)
-        z = apex[2] - r_grid * np.cos(outer)
-        verts = [list(zip(x.flatten(), y.flatten(), z.flatten()))]
+        # create smooth surfaces closing the wedge
+        t = np.linspace(yaw_start, yaw_end, 30)
+        r = np.linspace(r_min, r_max, 10)
+        T, R = np.meshgrid(t, r)
+        # outer cone surface
+        xo = apex[0] + R * np.sin(outer) * np.cos(T)
+        yo = apex[1] + R * np.sin(outer) * np.sin(T)
+        zo = apex[2] - R * np.cos(outer)
+        ax.plot_surface(xo, yo, zo, color=color, alpha=alpha, linewidth=0)
         if inner > 0:
-            xi = apex[0] + r_grid * np.sin(inner) * np.cos(theta_grid)
-            yi = apex[1] + r_grid * np.sin(inner) * np.sin(theta_grid)
-            zi = apex[2] - r_grid * np.cos(inner)
-            verts.append(list(zip(xi.flatten(), yi.flatten(), zi.flatten())))
-        poly = Poly3DCollection(verts, facecolors=color, alpha=alpha)
-        ax.add_collection3d(poly)
+            xi = apex[0] + R * np.sin(inner) * np.cos(T)
+            yi = apex[1] + R * np.sin(inner) * np.sin(T)
+            zi = apex[2] - R * np.cos(inner)
+            ax.plot_surface(xi, yi, zi, color=color, alpha=alpha, linewidth=0)
+            # surfaces closing the wedge sides
+            p = np.linspace(inner, outer, 10)
+            P, RR = np.meshgrid(p, r)
+            for ang in [yaw_start, yaw_end]:
+                xs = apex[0] + RR * np.sin(P) * np.cos(ang)
+                ys = apex[1] + RR * np.sin(P) * np.sin(ang)
+                zs = apex[2] - RR * np.cos(P)
+                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
+            # top and bottom surfaces of the truncated cone
+            for rad in [r_min, r_max]:
+                P, TT = np.meshgrid(p, t)
+                xs = apex[0] + rad * np.sin(P) * np.cos(TT)
+                ys = apex[1] + rad * np.sin(P) * np.sin(TT)
+                zs = apex[2] - rad * np.cos(P)
+                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
+        else:
+            # when inner == 0 just close the sides and bottom
+            p = np.linspace(0, outer, 10)
+            P, RR = np.meshgrid(p, r)
+            for ang in [yaw_start, yaw_end]:
+                xs = apex[0] + RR * np.sin(P) * np.cos(ang)
+                ys = apex[1] + RR * np.sin(P) * np.sin(ang)
+                zs = apex[2] - RR * np.cos(P)
+                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
+            # bottom surface
+            for rad in [r_max]:
+                P, TT = np.meshgrid(p, t)
+                xs = apex[0] + rad * np.sin(P) * np.cos(TT)
+                ys = apex[1] + rad * np.sin(P) * np.sin(TT)
+                zs = apex[2] - rad * np.cos(P)
+                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
 
 
 def main():
@@ -114,7 +153,10 @@ def main():
         "sections",
         {"front": True, "left": True, "right": True, "back": True},
     )
-    base_yaw = 0.0  # evader heading points along +x for this example
+    # direction from the evader toward the target projected onto the x-y plane
+    heading = target - evader_pos
+    heading[2] = 0.0
+    base_yaw = np.arctan2(heading[1], heading[0])
     deg45 = np.deg2rad(45.0)
     ranges = []
     if sections.get("front", True):
