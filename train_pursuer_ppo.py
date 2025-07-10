@@ -27,8 +27,8 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
     if norm > 1e-8:
         direction /= norm
     theta = np.arctan2(direction[1], direction[0])
-    phi = np.arccos(np.clip(direction[2], -1.0, 1.0))
-    phi = np.clip(phi, 0.0, env.cfg['evader']['stall_angle'])
+    phi = np.arctan2(direction[2], np.linalg.norm(direction[:2]))
+    phi = np.clip(phi, -env.cfg['evader']['stall_angle'], env.cfg['evader']['stall_angle'])
     mag = env.cfg['evader']['max_acceleration']
     return np.array([mag, theta, phi], dtype=np.float32)
 

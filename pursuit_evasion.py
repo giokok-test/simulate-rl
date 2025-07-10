@@ -107,9 +107,9 @@ class PursuitEvasionEnv(gym.Env):
             'evader': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.evader_obs_dim,), dtype=np.float32),
         })
         self.action_space = gym.spaces.Dict({
-            # actions: [acceleration magnitude, azimuth, polar]
+            # actions: [acceleration magnitude, azimuth, pitch]
             'pursuer': gym.spaces.Box(
-                low=np.array([0.0, -np.pi, 0.0], dtype=np.float32),
+                low=np.array([0.0, -np.pi, -cfg['pursuer']['stall_angle']], dtype=np.float32),
                 high=np.array([
                     cfg['pursuer']['max_acceleration'],
                     np.pi,
@@ -117,7 +117,7 @@ class PursuitEvasionEnv(gym.Env):
                 ], dtype=np.float32),
             ),
             'evader': gym.spaces.Box(
-                low=np.array([0.0, -np.pi, 0.0], dtype=np.float32),
+                low=np.array([0.0, -np.pi, -cfg['evader']['stall_angle']], dtype=np.float32),
                 high=np.array([
                     cfg['evader']['max_acceleration'],
                     np.pi,
@@ -238,29 +238,29 @@ class PursuitEvasionEnv(gym.Env):
 
         mag = float(np.clip(action[0], 0.0, max_acc))
         theta = float(action[1])
-        phi = float(np.clip(action[2], 0.0, stall))
+        phi = float(np.clip(action[2], -stall, stall))
         target_dir = np.array([
-            np.sin(phi) * np.cos(theta),
-            np.sin(phi) * np.sin(theta),
-            np.cos(phi),
+            np.cos(phi) * np.cos(theta),
+            np.cos(phi) * np.sin(theta),
+            np.sin(phi),
         ], dtype=np.float32)
         target_dir /= np.linalg.norm(target_dir) + 1e-8
 
         # Rotate current force direction toward the commanded yaw/pitch angles
         # separately, respecting independent turn rates
         cur_yaw = np.arctan2(dir_vec[1], dir_vec[0])
-        cur_pitch = np.arccos(np.clip(dir_vec[2], -1.0, 1.0))
+        cur_pitch = np.arctan2(dir_vec[2], np.linalg.norm(dir_vec[:2]))
         yaw_diff = np.arctan2(np.sin(theta - cur_yaw), np.cos(theta - cur_yaw))
         pitch_diff = phi - cur_pitch
         max_yaw = yaw_rate * self.dt
         max_pitch = pitch_rate * self.dt
         new_yaw = cur_yaw + np.clip(yaw_diff, -max_yaw, max_yaw)
         new_pitch = cur_pitch + np.clip(pitch_diff, -max_pitch, max_pitch)
-        new_pitch = np.clip(new_pitch, 0.0, stall)
+        new_pitch = np.clip(new_pitch, -stall, stall)
         new_dir = np.array([
-            np.sin(new_pitch) * np.cos(new_yaw),
-            np.sin(new_pitch) * np.sin(new_yaw),
-            np.cos(new_pitch),
+            np.cos(new_pitch) * np.cos(new_yaw),
+            np.cos(new_pitch) * np.sin(new_yaw),
+            np.sin(new_pitch),
         ], dtype=np.float32)
         new_dir /= np.linalg.norm(new_dir) + 1e-8
 
@@ -469,12 +469,12 @@ def main():
         action_e = np.array([
             np.random.uniform(0.0, config['evader']['max_acceleration']),
             np.random.uniform(-np.pi, np.pi),
-            np.random.uniform(0.0, config['evader']['stall_angle']),
+            np.random.uniform(-config['evader']['stall_angle'], config['evader']['stall_angle']),
         ], dtype=np.float32)
         action_p = np.array([
             np.random.uniform(0.0, config['pursuer']['max_acceleration']),
             np.random.uniform(-np.pi, np.pi),
-            np.random.uniform(0.0, config['pursuer']['stall_angle']),
+            np.random.uniform(-config['pursuer']['stall_angle'], config['pursuer']['stall_angle']),
         ], dtype=np.float32)
         obs, reward, done, _, _ = env.step({'evader': action_e, 'pursuer': action_p})
         step_count += 1
