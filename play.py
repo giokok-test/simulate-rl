@@ -25,6 +25,9 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
     model.eval()
 
     obs, _ = env.reset()
+    # store initial headings before the environment steps
+    p_init_dir = env.env.pursuer_force_dir.copy()
+    e_init_dir = env.env.evader_force_dir.copy()
     # collect positions for plotting
     pursuer_traj = [env.env.pursuer_pos.copy()]
     evader_traj = [env.env.evader_pos.copy()]
@@ -66,10 +69,8 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
     ax.plot(e[:, 0], e[:, 1], e[:, 2], label="evader")
     # draw arrows showing the initial heading for both agents
     arrow_len = 1000.0
-    p_dir = env.env.pursuer_force_dir
-    p_dir = p_dir / (np.linalg.norm(p_dir) + 1e-8)
-    e_dir = env.env.evader_force_dir
-    e_dir = e_dir / (np.linalg.norm(e_dir) + 1e-8)
+    p_dir = p_init_dir / (np.linalg.norm(p_init_dir) + 1e-8)
+    e_dir = e_init_dir / (np.linalg.norm(e_init_dir) + 1e-8)
     ax.quiver(
         p[0, 0],
         p[0, 1],
