@@ -21,6 +21,11 @@ evader:
   up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [deg]
   stall_angle: 45.0
+  # Preset trajectory mode. Use "dive" to level off until the dive angle
+  # threshold is reached
+  trajectory: direct
+  # Angle to the target at which the evader begins its dive [deg]
+  dive_angle: 20.0
 pursuer:
   # Mass of the pursuer [kg]
   mass: 100.0
@@ -53,6 +58,8 @@ target_reward_distance: 100.0
 shaping_weight: 0.05
 # Additional reward weight for simply getting closer to the evader each step
 closer_weight: 0.05
+# Additional reward weight for reducing the pursuer-to-evader angle
+angle_weight: 0.0
 # Coordinates of the evader's goal [m]
 target_position: [0, 0.0, 0.0]
 evader_start:

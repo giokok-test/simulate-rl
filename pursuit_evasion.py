@@ -119,11 +119,18 @@ class PursuitEvasionEnv(gym.Env):
         # evader between consecutive steps. This complements the basic shaping
         # reward above which encourages closing the gap proportionally.
         self.closer_weight = self.cfg.get('closer_weight', 0.0)
+        # Reward for reducing the angle between the pursuer's force direction
+        # and the line of sight to the evader from one step to the next.
+        self.angle_weight = self.cfg.get('angle_weight', 0.0)
         self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
         # Convert stall angles provided in degrees to radians once
         self.cfg['evader']['stall_angle'] = np.deg2rad(
             self.cfg['evader']['stall_angle']
         )
+        if 'dive_angle' in self.cfg['evader']:
+            self.cfg['evader']['dive_angle'] = np.deg2rad(
+                self.cfg['evader']['dive_angle']
+            )
         self.cfg['pursuer']['stall_angle'] = np.deg2rad(
             self.cfg['pursuer']['stall_angle']
         )
@@ -212,6 +219,8 @@ class PursuitEvasionEnv(gym.Env):
         self.pursuer_force_mag = 0.0
         # record baseline distances for shaping rewards
         self.prev_pe_dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
+        vec_pe = self.evader_pos - self.pursuer_pos
+        self.prev_pe_angle = self._angle_between(self.pursuer_force_dir, vec_pe)
         # store the starting distance for logging
         self.start_pe_dist = self.prev_pe_dist
         target = np.array(self.cfg['target_position'], dtype=np.float32)
@@ -250,6 +259,14 @@ class PursuitEvasionEnv(gym.Env):
         closer_bonus = 0.0
         if self.closer_weight > 0.0 and dist_pe < self.prev_pe_dist:
             closer_bonus = self.closer_weight * (self.prev_pe_dist - dist_pe)
+        # Reward when the pursuer aligns its force direction with the line of
+        # sight to the evader compared to the previous step.
+        vec_pe = self.evader_pos - self.pursuer_pos
+        angle = self._angle_between(self.pursuer_force_dir, vec_pe)
+        angle_bonus = 0.0
+        if self.angle_weight > 0.0 and angle < self.prev_pe_angle:
+            angle_bonus = self.angle_weight * (self.prev_pe_angle - angle)
+        self.prev_pe_angle = angle
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
 
@@ -257,6 +274,7 @@ class PursuitEvasionEnv(gym.Env):
         r_e += self.shaping_weight * shape_e
         r_p += self.shaping_weight * shape_p
         r_p += closer_bonus
+        r_p += angle_bonus
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
         info = {}
@@ -348,6 +366,13 @@ class PursuitEvasionEnv(gym.Env):
         if speed > top_speed:
             vel[:] = vel / speed * top_speed
         pos[:] = pos + vel * self.dt
+
+    def _angle_between(self, a: np.ndarray, b: np.ndarray) -> float:
+        """Return angle between two vectors in radians."""
+        a_n = np.linalg.norm(a) + 1e-8
+        b_n = np.linalg.norm(b) + 1e-8
+        cos_t = np.clip(np.dot(a, b) / (a_n * b_n), -1.0, 1.0)
+        return float(np.arccos(cos_t))
 
     def _observe_enemy(self, observer_pos: np.ndarray, enemy_pos: np.ndarray,
                         prev_obs: np.ndarray | None) -> tuple[np.ndarray, np.ndarray]:

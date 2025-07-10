@@ -81,10 +81,10 @@ which is useful for quickly checking that the environment works.
   marks the evader's goal position and draws arrows indicating the initial
   heading of both players. During the run a table prints the distance vectors
   between the players and the goal along with the current velocities for both
-  agents. The spawn volume for the pursuer is drawn using translucent green
-  surfaces so you can verify the configuration visually.
+  agents. The spawn volume for the pursuer is now outlined with green lines
+  only (surface fills were removed to keep the plot responsive).
 - `plot_config.py` renders a stand-alone visualisation of the environment
-  configuration including the closed spawn volume. The accompanying
+  configuration showing an outline of the spawn volume. The accompanying
   `SpawnVolumeDemo.ipynb` notebook calls this script so you can interactively
   adjust `config.yaml` and inspect the effect.
 
@@ -117,6 +117,9 @@ these options define where the pursuer may appear at the beginning of an
 episode.
 Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
 at runtime, so changes take effect the next time you run the scripts.
+The reward shaping parameters `shaping_weight`, `closer_weight` and
+`angle_weight` can be adjusted here as well to encourage desired
+behaviour.
 
 The `evader.awareness_mode` option defines how much information the
 evader receives about the pursuer:
@@ -135,6 +138,10 @@ x–y plane (positive values command an upward climb). Both agents clamp
 their pitch commands to ``[-stall_angle, +stall_angle]``. The first action
 component controls acceleration. The pursuer may command negative values
 down to ``-max_acceleration`` to brake. The
+``evader.trajectory`` option selects a preset flight profile. When set to
+``"dive"`` the evader keeps a non-negative pitch until the line of sight to the
+target drops below ``evader.dive_angle`` (specified in degrees). Once past this
+threshold the evader begins descending toward the goal. The
 `episode_duration` value defines how long each episode lasts in minutes and
 is used to compute the maximum number of simulation steps based on the
 configured `time_step`.

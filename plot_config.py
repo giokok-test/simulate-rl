@@ -67,51 +67,9 @@ def draw_spawn_volume(
                 z = apex[2] - np.array([r_min, r_max]) * np.cos(inner)
                 ax.plot(x, y, z, **line_kw)
 
-        # create smooth surfaces closing the wedge
-        t = np.linspace(yaw_start, yaw_end, 30)
-        r = np.linspace(r_min, r_max, 10)
-        T, R = np.meshgrid(t, r)
-        # outer cone surface
-        xo = apex[0] + R * np.sin(outer) * np.cos(T)
-        yo = apex[1] + R * np.sin(outer) * np.sin(T)
-        zo = apex[2] - R * np.cos(outer)
-        ax.plot_surface(xo, yo, zo, color=color, alpha=alpha, linewidth=0)
-        if inner > 0:
-            xi = apex[0] + R * np.sin(inner) * np.cos(T)
-            yi = apex[1] + R * np.sin(inner) * np.sin(T)
-            zi = apex[2] - R * np.cos(inner)
-            ax.plot_surface(xi, yi, zi, color=color, alpha=alpha, linewidth=0)
-            # surfaces closing the wedge sides
-            p = np.linspace(inner, outer, 10)
-            P, RR = np.meshgrid(p, r)
-            for ang in [yaw_start, yaw_end]:
-                xs = apex[0] + RR * np.sin(P) * np.cos(ang)
-                ys = apex[1] + RR * np.sin(P) * np.sin(ang)
-                zs = apex[2] - RR * np.cos(P)
-                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
-            # top and bottom surfaces of the truncated cone
-            for rad in [r_min, r_max]:
-                P, TT = np.meshgrid(p, t)
-                xs = apex[0] + rad * np.sin(P) * np.cos(TT)
-                ys = apex[1] + rad * np.sin(P) * np.sin(TT)
-                zs = apex[2] - rad * np.cos(P)
-                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
-        else:
-            # when inner == 0 just close the sides and bottom
-            p = np.linspace(0, outer, 10)
-            P, RR = np.meshgrid(p, r)
-            for ang in [yaw_start, yaw_end]:
-                xs = apex[0] + RR * np.sin(P) * np.cos(ang)
-                ys = apex[1] + RR * np.sin(P) * np.sin(ang)
-                zs = apex[2] - RR * np.cos(P)
-                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
-            # bottom surface
-            for rad in [r_max]:
-                P, TT = np.meshgrid(p, t)
-                xs = apex[0] + rad * np.sin(P) * np.cos(TT)
-                ys = apex[1] + rad * np.sin(P) * np.sin(TT)
-                zs = apex[2] - rad * np.cos(P)
-                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
+    # Surfaces used to fill the volume were removed to improve
+    # interactive performance. Only the outline lines are drawn now so the
+    # spawn area remains visible without the heavy translucent meshes.
 
 
 def main():
@@ -221,6 +179,7 @@ def main():
         f"time step: {cfg['time_step']} s\n"
         f"episode duration: {cfg.get('episode_duration', 0.0)} min\n"
         f"shaping weight: {cfg['shaping_weight']}\n"
+        f"angle weight: {cfg.get('angle_weight', 0.0)}\n"
     )
     fig.text(0.01, 0.95, evader_txt, fontsize=9, va="top")
     fig.text(0.25, 0.95, pursuer_txt, fontsize=9, va="top")
