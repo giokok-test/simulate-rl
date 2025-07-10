@@ -117,6 +117,9 @@ these options define where the pursuer may appear at the beginning of an
 episode.
 Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
 at runtime, so changes take effect the next time you run the scripts.
+The reward shaping parameters `shaping_weight`, `closer_weight` and
+`angle_weight` can be adjusted here as well to encourage desired
+behaviour.
 
 The `evader.awareness_mode` option defines how much information the
 evader receives about the pursuer:
