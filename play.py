@@ -49,45 +49,9 @@ def draw_spawn_volume(
                 z = apex[2] - np.array([r_min, r_max]) * np.cos(inner)
                 ax.plot(x, y, z, **line_kw)
 
-        t = np.linspace(yaw_start, yaw_end, 30)
-        r = np.linspace(r_min, r_max, 10)
-        T, R = np.meshgrid(t, r)
-        xo = apex[0] + R * np.sin(outer) * np.cos(T)
-        yo = apex[1] + R * np.sin(outer) * np.sin(T)
-        zo = apex[2] - R * np.cos(outer)
-        ax.plot_surface(xo, yo, zo, color=color, alpha=alpha, linewidth=0)
-        if inner > 0:
-            xi = apex[0] + R * np.sin(inner) * np.cos(T)
-            yi = apex[1] + R * np.sin(inner) * np.sin(T)
-            zi = apex[2] - R * np.cos(inner)
-            ax.plot_surface(xi, yi, zi, color=color, alpha=alpha, linewidth=0)
-            p = np.linspace(inner, outer, 10)
-            P, RR = np.meshgrid(p, r)
-            for ang in [yaw_start, yaw_end]:
-                xs = apex[0] + RR * np.sin(P) * np.cos(ang)
-                ys = apex[1] + RR * np.sin(P) * np.sin(ang)
-                zs = apex[2] - RR * np.cos(P)
-                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
-            for rad in [r_min, r_max]:
-                P, TT = np.meshgrid(p, t)
-                xs = apex[0] + rad * np.sin(P) * np.cos(TT)
-                ys = apex[1] + rad * np.sin(P) * np.sin(TT)
-                zs = apex[2] - rad * np.cos(P)
-                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
-        else:
-            p = np.linspace(0, outer, 10)
-            P, RR = np.meshgrid(p, r)
-            for ang in [yaw_start, yaw_end]:
-                xs = apex[0] + RR * np.sin(P) * np.cos(ang)
-                ys = apex[1] + RR * np.sin(P) * np.sin(ang)
-                zs = apex[2] - RR * np.cos(P)
-                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
-            for rad in [r_max]:
-                P, TT = np.meshgrid(p, t)
-                xs = apex[0] + rad * np.sin(P) * np.cos(TT)
-                ys = apex[1] + rad * np.sin(P) * np.sin(TT)
-                zs = apex[2] - rad * np.cos(P)
-                ax.plot_surface(xs, ys, zs, color=color, alpha=alpha, linewidth=0)
+    # Surfaces that used to fill the volume were removed to reduce lag
+    # in interactive plots. Only the outline is drawn now so the spawn
+    # region remains visible without the heavy meshes.
 
 
 def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = None) -> None:
