@@ -64,6 +64,38 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
     e = np.stack(evader_traj)
     ax.plot(p[:, 0], p[:, 1], p[:, 2], label="pursuer")
     ax.plot(e[:, 0], e[:, 1], e[:, 2], label="evader")
+    # draw arrows showing the initial heading for both agents
+    arrow_len = 1000.0
+    p_dir = env.env.pursuer_vel
+    p_norm = np.linalg.norm(p_dir)
+    if p_norm > 1e-6:
+        p_dir = p_dir / p_norm
+    e_dir = env.env.evader_force_dir
+    e_dir = e_dir / (np.linalg.norm(e_dir) + 1e-8)
+    ax.quiver(
+        p[0, 0],
+        p[0, 1],
+        p[0, 2],
+        p_dir[0],
+        p_dir[1],
+        p_dir[2],
+        length=arrow_len,
+        color="blue",
+        arrow_length_ratio=0.1,
+        label="pursuer heading",
+    )
+    ax.quiver(
+        e[0, 0],
+        e[0, 1],
+        e[0, 2],
+        e_dir[0],
+        e_dir[1],
+        e_dir[2],
+        length=arrow_len,
+        color="orange",
+        arrow_length_ratio=0.1,
+        label="evader heading",
+    )
     # mark the evader's target position
     target = np.asarray(env.env.cfg["target_position"], dtype=float)
     ax.scatter(*target, color="red", marker="*", s=100, label="goal")
