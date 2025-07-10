@@ -149,8 +149,21 @@ class PursuitEvasionEnv(gym.Env):
         ang = np.random.uniform(0.0, 2 * np.pi)
         start_xy = target[:2] + dist * np.array([np.cos(ang), np.sin(ang)], dtype=np.float32)
         self.evader_pos = np.array([start_xy[0], start_xy[1], altitude], dtype=np.float32)
-        self.evader_vel = np.zeros(3, dtype=np.float32)
+
+        # Initial velocity roughly toward the target in the x-y plane
         dir_xy = target[:2] - start_xy
+        dir_xy /= np.linalg.norm(dir_xy) + 1e-8
+        # rotate within ±15 degrees to introduce some randomness
+        max_off = np.deg2rad(15.0)
+        rot_ang = np.random.uniform(-max_off, max_off)
+        rot_mat = np.array([
+            [np.cos(rot_ang), -np.sin(rot_ang)],
+            [np.sin(rot_ang), np.cos(rot_ang)],
+        ], dtype=np.float32)
+        heading = rot_mat @ dir_xy
+        speed = start_cfg.get('initial_speed', 0.0)
+        self.evader_vel = np.array([heading[0], heading[1], 0.0], dtype=np.float32) * speed
+
         dir_vec = np.array([dir_xy[0], dir_xy[1], 0.0], dtype=np.float32)
         dir_vec /= np.linalg.norm(dir_vec) + 1e-8
         self.evader_force_dir = dir_vec
