@@ -259,7 +259,7 @@ class PursuitEvasionEnv(gym.Env):
                 info['outcome'] = 'evader_ground'
             elif self.pursuer_pos[2] < 0.0:
                 info['outcome'] = 'pursuer_ground'
-            elif dist_pe >= 2 * self.start_pe_dist:
+            elif dist_pe >= 5 * self.start_pe_dist:
                 info['outcome'] = 'separation_exceeded'
 
         self.cur_step += 1
@@ -365,7 +365,7 @@ class PursuitEvasionEnv(gym.Env):
 
         if dist <= self.cfg['capture_radius']:
             return True, -1.0, 1.0
-        if dist >= 2 * self.start_pe_dist:
+        if dist >= 5 * self.start_pe_dist:
             return True, 0.0, 0.0
 
         # episode ends if either agent goes below ground level
