@@ -336,10 +336,10 @@ class PursuitEvasionEnv(gym.Env):
             self.pursuer_force_dir = new_dir
             self.pursuer_force_mag = mag
 
-        # Compute acceleration in world frame. Drag always opposes thrust and
-        # gravity only affects the evader.
+        # Compute acceleration in world frame. Drag opposes the current
+        # velocity while gravity only affects the evader.
         acc_cmd = new_dir * mag
-        drag = -drag_c * new_dir
+        drag = -drag_c * vel
         acc_total = acc_cmd + drag + gravity
 
         # Simple Euler integration of velocity and position
