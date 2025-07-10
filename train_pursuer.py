@@ -185,6 +185,8 @@ def train(
     for episode in range(num_episodes):
         # Collect one episode of experience
         obs, _ = env.reset()
+        init_pursuer_pos = env.env.pursuer_pos.copy()
+        init_evader_pos = env.env.evader_pos.copy()
         log_probs = []
         rewards = []
         done = False
@@ -223,6 +225,8 @@ def train(
         loss.backward()
         optimizer.step()
 
+        print(f"Initial pursuer pos: {init_pursuer_pos}")
+        print(f"Initial evader pos: {init_evader_pos}")
         print(header)
         print("-" * len(header))
         for row in first_rows:
