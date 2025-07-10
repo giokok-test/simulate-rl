@@ -158,6 +158,8 @@ class PursuitEvasionEnv(gym.Env):
         self.pursuer_force_mag = 0.0
         # record baseline distances for shaping rewards
         self.prev_pe_dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
+        # store the starting distance for logging
+        self.start_pe_dist = self.prev_pe_dist
         target = np.array(self.cfg['target_position'], dtype=np.float32)
         self.prev_target_dist = np.linalg.norm(self.evader_pos - target)
         # metrics for episode statistics
@@ -201,6 +203,7 @@ class PursuitEvasionEnv(gym.Env):
                 'min_distance': float(self.min_pe_dist),
                 'final_distance': float(dist_pe),
                 'evader_to_target': float(dist_target),
+                'start_distance': float(self.start_pe_dist),
             }
             if dist_pe <= self.cfg['capture_radius']:
                 info['outcome'] = 'capture'

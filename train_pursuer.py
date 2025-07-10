@@ -31,13 +31,17 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
 class PursuerOnlyEnv(gym.Env):
     """Environment exposing only the pursuer. The evader follows ``evader_policy``."""
 
-    def __init__(self, cfg: dict, max_steps: int = 20):
+    def __init__(self, cfg: dict, max_steps: int | None = None):
         super().__init__()
         # Full pursuit-evasion environment internally used
         self.env = PursuitEvasionEnv(cfg)
         self.observation_space = self.env.observation_space['pursuer']
         self.action_space = self.env.action_space['pursuer']
-        self.max_steps = max_steps
+        if max_steps is None:
+            duration = cfg.get('episode_duration', 0.1)
+            self.max_steps = int(duration * 60.0 / cfg['time_step'])
+        else:
+            self.max_steps = max_steps
         self.cur_step = 0
 
     def reset(self, *, seed=None, options=None):
@@ -45,6 +49,7 @@ class PursuerOnlyEnv(gym.Env):
 
         obs, info = self.env.reset(seed=seed)
         self.cur_step = 0
+        self.start_distance = self.env.start_pe_dist
         return obs['pursuer'].astype(np.float32), info
 
     def step(self, action: np.ndarray):
@@ -52,6 +57,7 @@ class PursuerOnlyEnv(gym.Env):
 
         e_action = evader_policy(self.env)
         obs, reward, done, truncated, info = self.env.step({'pursuer': action, 'evader': e_action})
+        info.setdefault('start_distance', float(self.env.start_pe_dist))
         self.cur_step += 1
         if self.cur_step >= self.max_steps and not done:
             done = True
@@ -61,6 +67,7 @@ class PursuerOnlyEnv(gym.Env):
             target = np.array(self.env.cfg['target_position'], dtype=np.float32)
             dist_target = np.linalg.norm(self.env.evader_pos - target)
             info.setdefault('evader_to_target', float(dist_target))
+            info.setdefault('start_distance', float(self.env.start_pe_dist))
             info['outcome'] = 'timeout'
         return obs['pursuer'].astype(np.float32), float(reward['pursuer']), done, truncated, info
 
@@ -130,13 +137,15 @@ def train(cfg: dict, save_path: Optional[str] = None):
         log_probs = []
         rewards = []
         done = False
+        info = {}
+        start_d = env.start_distance
         while not done:
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
             mean = policy(obs_t)
             dist = torch.distributions.Normal(mean, torch.ones_like(mean))
             action = dist.sample()
             log_prob = dist.log_prob(action).sum()
-            obs, r, done, _, _ = env.step(action.cpu().numpy())
+            obs, r, done, _, info = env.step(action.cpu().numpy())
             log_probs.append(log_prob)
             rewards.append(r)
         # Compute discounted returns
@@ -151,6 +160,11 @@ def train(cfg: dict, save_path: Optional[str] = None):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        if info:
+            print(
+                f"Episode {episode+1}: outcome={info.get('outcome', 'timeout')} "
+                f"start={start_d:.2f} min={info.get('min_distance', float('nan')):.2f}"
+            )
         if (episode + 1) % eval_freq == 0:
             # Periodically report progress on separate evaluation episodes
             avg_r, success = evaluate(policy, PursuerOnlyEnv(config))

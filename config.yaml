@@ -42,6 +42,8 @@ pursuer:
 gravity: 9.81
 # Simulation time step [s]
 time_step: 0.1
+# Duration of one episode [min]
+episode_duration: 0.1
 # Distance at which capture is considered successful [m]
 capture_radius: 1.0
 # Weight for shaping rewards

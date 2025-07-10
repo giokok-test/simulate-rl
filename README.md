@@ -73,8 +73,9 @@ python pursuit_evasion.py
 which is useful for quickly checking that the environment works.
 
 - `play.py` loads a saved policy and runs a single episode. Use the `--ppo`
-  flag when loading a model trained with the PPO script. The `--steps` option
-  controls how many simulation steps are executed before declaring a timeout.
+  flag when loading a model trained with the PPO script. Episodes run for the
+  duration specified by `episode_duration` in `config.yaml` unless `--steps` is
+  used to override the maximum number of simulation steps.
   The plot now highlights the starting and final positions of both agents and
   marks the evader's goal position.
 
@@ -106,4 +107,7 @@ evader receives about the pursuer:
 The `yaw_rate` and `pitch_rate` values for both agents are specified in
 degrees per second and are converted internally to radians per second.
 Similarly, the `stall_angle` parameter in `config.yaml` is given in
-degrees but converted to radians when the environment loads.
+degrees but converted to radians when the environment loads. The
+`episode_duration` value defines how long each episode lasts in minutes and
+is used to compute the maximum number of simulation steps based on the
+configured `time_step`.
