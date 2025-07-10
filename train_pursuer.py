@@ -40,7 +40,7 @@ def _format_step(env: PursuerOnlyEnv, step: int, target: np.ndarray) -> str:
 
 
 def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
-    """Evader accelerates toward the target."""
+    """Evader accelerates toward the target with optional dive profile."""
     pos = env.evader_pos
     target = np.array(env.cfg['target_position'], dtype=np.float32)
     direction = target - pos
@@ -48,7 +48,16 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
     if norm > 1e-8:
         direction /= norm
     theta = np.arctan2(direction[1], direction[0])
-    phi = np.arctan2(direction[2], np.linalg.norm(direction[:2]))
+    phi_target = np.arctan2(direction[2], np.linalg.norm(direction[:2]))
+    mode = env.cfg['evader'].get('trajectory', 'direct')
+    if mode == 'dive':
+        threshold = env.cfg['evader'].get('dive_angle', 0.0)
+        if phi_target > -threshold:
+            phi = max(0.0, phi_target)
+        else:
+            phi = phi_target
+    else:
+        phi = phi_target
     phi = np.clip(phi, -env.cfg['evader']['stall_angle'], env.cfg['evader']['stall_angle'])
     mag = env.cfg['evader']['max_acceleration']
     return np.array([mag, theta, phi], dtype=np.float32)

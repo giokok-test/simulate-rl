@@ -124,6 +124,10 @@ class PursuitEvasionEnv(gym.Env):
         self.cfg['evader']['stall_angle'] = np.deg2rad(
             self.cfg['evader']['stall_angle']
         )
+        if 'dive_angle' in self.cfg['evader']:
+            self.cfg['evader']['dive_angle'] = np.deg2rad(
+                self.cfg['evader']['dive_angle']
+            )
         self.cfg['pursuer']['stall_angle'] = np.deg2rad(
             self.cfg['pursuer']['stall_angle']
         )

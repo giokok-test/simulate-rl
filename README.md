@@ -135,6 +135,10 @@ x–y plane (positive values command an upward climb). Both agents clamp
 their pitch commands to ``[-stall_angle, +stall_angle]``. The first action
 component controls acceleration. The pursuer may command negative values
 down to ``-max_acceleration`` to brake. The
+``evader.trajectory`` option selects a preset flight profile. When set to
+``"dive"`` the evader keeps a non-negative pitch until the line of sight to the
+target drops below ``evader.dive_angle`` (specified in degrees). Once past this
+threshold the evader begins descending toward the goal. The
 `episode_duration` value defines how long each episode lasts in minutes and
 is used to compute the maximum number of simulation steps based on the
 configured `time_step`.
