@@ -2,6 +2,7 @@ import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 
 def load_config(path="config.yaml"):
@@ -27,33 +28,51 @@ def draw_cone(ax, apex, angle, r_min, r_max, **kw):
         ax.plot(x, y, z, **kw)
 
 
-def draw_spawn_volume(ax, apex, inner, outer, r_min, r_max, yaw_ranges, **kw):
-    """Visualise the pursuer spawn volume."""
+def draw_spawn_volume(ax, apex, inner, outer, r_min, r_max, yaw_ranges, *, color="green", alpha=0.15, linestyle="--"):
+    """Visualise the pursuer spawn volume.
+
+    The function draws the cone boundaries as lines and also shades the volume
+    using translucent polygon surfaces.
+    """
+    line_kw = {"color": color, "linestyle": linestyle}
     for yaw_start, yaw_end in yaw_ranges:
         theta = np.linspace(yaw_start, yaw_end, 30)
         for r in np.linspace(r_min, r_max, 4):
-            # outer boundary
             x = apex[0] + r * np.sin(outer) * np.cos(theta)
             y = apex[1] + r * np.sin(outer) * np.sin(theta)
             z = apex[2] - r * np.cos(outer)
-            ax.plot(x, y, z, **kw)
-            # inner boundary
+            ax.plot(x, y, z, **line_kw)
             if inner > 0:
                 x = apex[0] + r * np.sin(inner) * np.cos(theta)
                 y = apex[1] + r * np.sin(inner) * np.sin(theta)
                 z = apex[2] - r * np.cos(inner)
-                ax.plot(x, y, z, **kw)
-        # side edges
+                ax.plot(x, y, z, **line_kw)
         for ang in [yaw_start, yaw_end]:
             x = apex[0] + np.array([r_min, r_max]) * np.sin(outer) * np.cos(ang)
             y = apex[1] + np.array([r_min, r_max]) * np.sin(outer) * np.sin(ang)
             z = apex[2] - np.array([r_min, r_max]) * np.cos(outer)
-            ax.plot(x, y, z, **kw)
+            ax.plot(x, y, z, **line_kw)
             if inner > 0:
                 x = apex[0] + np.array([r_min, r_max]) * np.sin(inner) * np.cos(ang)
                 y = apex[1] + np.array([r_min, r_max]) * np.sin(inner) * np.sin(ang)
                 z = apex[2] - np.array([r_min, r_max]) * np.cos(inner)
-                ax.plot(x, y, z, **kw)
+                ax.plot(x, y, z, **line_kw)
+
+        # shaded volume for this wedge
+        theta_s = np.linspace(yaw_start, yaw_end, 15)
+        r_s = np.linspace(r_min, r_max, 2)
+        theta_grid, r_grid = np.meshgrid(theta_s, r_s)
+        x = apex[0] + r_grid * np.sin(outer) * np.cos(theta_grid)
+        y = apex[1] + r_grid * np.sin(outer) * np.sin(theta_grid)
+        z = apex[2] - r_grid * np.cos(outer)
+        verts = [list(zip(x.flatten(), y.flatten(), z.flatten()))]
+        if inner > 0:
+            xi = apex[0] + r_grid * np.sin(inner) * np.cos(theta_grid)
+            yi = apex[1] + r_grid * np.sin(inner) * np.sin(theta_grid)
+            zi = apex[2] - r_grid * np.cos(inner)
+            verts.append(list(zip(xi.flatten(), yi.flatten(), zi.flatten())))
+        poly = Poly3DCollection(verts, facecolors=color, alpha=alpha)
+        ax.add_collection3d(poly)
 
 
 def main():
@@ -117,6 +136,7 @@ def main():
         ranges,
         color="green",
         linestyle="--",
+        alpha=0.2,
     )
     ax.text(*(evader_pos - [0, 0, p_cfg["min_range"]]), "pursuer spawn volume", color="green")
 
