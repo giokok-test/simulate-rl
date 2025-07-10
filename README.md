@@ -150,7 +150,7 @@ is greater than zero each agent observes the other via noisy right ascension
 ($\alpha$) and declination ($\delta$) angles. The noise is modelled as a  
 percentage of the measured angles, where
 
-![sigma](https://latex.codecogs.com/svg.latex?%5Ccolor%7Bwhite%7D%20%5Csigma%20%3D%20%5Cfrac%7B%5Cmathrm%7Bmeasurement_e_r_r_o_r%7D%7D%7B100%7D)
+![sigma](https://latex.codecogs.com/svg.latex?%5Ccolor%7Bwhite%7D%20%5Csigma%20%3D%20%5Cfrac%7B%5Cmathrm%7Bmeasurement_e%7D%7D%7B100%7D)
 
 and the perturbed angles satisfy
 
