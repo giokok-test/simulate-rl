@@ -78,7 +78,9 @@ which is useful for quickly checking that the environment works.
   used to override the maximum number of simulation steps.
   The plot now highlights the starting and final positions of both agents,
   marks the evader's goal position and draws arrows indicating the initial
-  heading of both players.
+  heading of both players. During the run a table prints the distance vectors
+  between the players and the goal along with the current velocities for both
+  agents.
 
 The environment stores several statistics for each episode. When an episode
 finishes the ``info`` dictionary returned from ``env.step`` contains the
