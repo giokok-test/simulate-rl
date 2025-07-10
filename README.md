@@ -144,32 +144,38 @@ default.
 
 ## Sensor error model
 
-The configuration file defines a `measurement_error_pct` option controlling
-the uncertainty in angular measurements of the opposing agent. When the value
-is greater than zero each agent observes the other via noisy right ascension
-($\alpha$) and declination ($\delta$) angles. The noise is modelled as a
+The configuration file defines a `measurement_error_pct` option controlling  
+the uncertainty in angular measurements of the opposing agent. When the value  
+is greater than zero each agent observes the other via noisy right ascension  
+($\alpha$) and declination ($\delta$) angles. The noise is modelled as a  
 percentage of the measured angles, where
 
-$\sigma = \frac{\mathrm{measurement\_error}}{100}$
+![sigma](https://latex.codecogs.com/svg.latex?\sigma%20%3D%20%5Cfrac%7B%5Cmathrm%7Bmeasurement_error_pct%7D%7D%7B100%7D)
 
 and the perturbed angles satisfy
 
-$\alpha' = \alpha + \alpha\\sigma\\varepsilon_\alpha, \quad\delta' = \delta + \delta\sigma\varepsilon_\delta$
+![alpha delta](https://latex.codecogs.com/svg.latex?\alpha'%20%3D%20%5Calpha%20%2B%20%5Calpha%5C%2C%5Csigma%5C%2C%5Cvarepsilon_%5Calpha%2C%5Cquad%20%5Cdelta'%20%3D%20%5Cdelta%20%2B%20%5Cdelta%5C%2C%5Csigma%5C%2C%5Cvarepsilon_%5Cdelta)
 
-with $\varepsilon_\alpha\varepsilon_\delta\sim\mathcal{N}(0,1)$.
+with $\varepsilon_\alpha,\;\varepsilon_\delta\sim\mathcal{N}(0,1)$.
 
 These are converted into a unit direction vector:
 
-$u' = \bigl[\cos\delta'\cos\alpha'\;\cos\delta'\sin\alpha'\;\sin\delta'\bigr].$
+![u prime](https://latex.codecogs.com/svg.latex?u'%20%3D%20%5B%20%5Ccos%5Cdelta'%5Ccos%5Calpha'%20%5C;%20%5Ccos%5Cdelta'%5Csin%5Calpha'%20%5C;%20%5Csin%5Cdelta'%20%5D)
 
 If the true range to the target is $R$, the observed position becomes
-$p + R\,u'$.  Linearising around the true angles yields the first‐order error
 
-$\Delta r \approx R\bigl(\Delta\alpha\partial u/\partial\alpha + \Delta\delta\partial u/\partial\delta\bigr),$
+![position](https://latex.codecogs.com/svg.latex?p%20%2B%20R%20u')
+
+Linearising around the true angles yields the first‐order position‐error
+
+![delta r](https://latex.codecogs.com/svg.latex?%5CDelta%20r%20%5Capprox%20R%28%5CDelta%5Calpha%5Cpartial%20u%2F%5Cpartial%5Calpha%20%2B%20%5CDelta%5Cdelta%5Cpartial%20u%2F%5Cpartial%5Cdelta%29)
 
 where
 
-$\frac{\partial u}{\partial\alpha} = \bigl[-\cos\delta\sin\alpha\;\cos\delta\cos\alpha\;0\bigr],\quad\frac{\partial u}{\partial\delta} = \bigl[-\sin\delta\cos\alpha,\;-\sin\delta\sin\alpha\;\cos\delta\bigr].$
+![partial alpha](https://latex.codecogs.com/svg.latex?%5Cfrac%7B%5Cpartial%20u%7D%7B%5Cpartial%5Calpha%7D%20%3D%20%5B-%5Ccos%5Cdelta%5Csin%5Calpha%5C;%20%5Ccos%5Cdelta%5Ccos%5Calpha%5C;%200%5D)
 
-Velocity is then estimated from successive noisy positions, so the velocity
-error is the difference of the position errors divided by the simulation time step.
+![partial delta](https://latex.codecogs.com/svg.latex?%5Cfrac%7B%5Cpartial%20u%7D%7B%5Cpartial%5Cdelta%7D%20%3D%20%5B-%5Csin%5Cdelta%5Ccos%5Calpha%5C;-%5Csin%5Cdelta%5Csin%5Calpha%5C;%20%5Ccos%5Cdelta%5D)
+
+Velocity is then estimated from successive noisy positions, so the velocity  
+error is simply the difference between these position‐errors divided by the  
+simulation time‐step.
