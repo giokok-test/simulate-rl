@@ -2,11 +2,11 @@ evader:
   # Mass of the evader aircraft [kg]
   mass: 1500.0
   # Maximum acceleration magnitude the evader can command [m/s^2]
-  max_acceleration: 20.0
+  max_acceleration: 15.0
   # Upper speed limit [m/s]
-  top_speed: 300.0
+  top_speed: 100.0
   # Dimensionless coefficient modelling drag
-  drag_coefficient: 0.02
+  drag_coefficient: 0
   # How much information the evader gets about the pursuer
   #   1 - evader has no knowledge of the pursuer
   #   2 - only the distance to the pursuer is observed
@@ -27,19 +27,19 @@ pursuer:
   # Maximum acceleration magnitude [m/s^2]
   max_acceleration: 30.0
   # Upper speed limit [m/s]
-  top_speed: 350.0
+  top_speed: 150.0
   # Dimensionless coefficient modelling drag
-  drag_coefficient: 0.03
+  drag_coefficient: 0.0
   # Maximum yaw rotation rate [deg/s]
-  yaw_rate: 10.0
+  yaw_rate: 20.0
   # Maximum pitch rotation rate [deg/s]
-  pitch_rate: 15.0
+  pitch_rate: 25.0
   # Initial force direction
   up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [deg]
   stall_angle: 55.0
 # Downward gravitational acceleration [m/s^2]
-gravity: 9.81
+gravity: 0
 # Simulation time step [s]
 time_step: 0.1
 # Duration of one episode [min]
@@ -58,18 +58,18 @@ evader_start:
   # Starting altitude [m]
   altitude: 3000.0
   # Initial speed directed toward the target [m/s]
-  initial_speed: 200.0
+  initial_speed: 50.0
 pursuer_start:
   # Maximum half angle of the pursuer spawn cone [rad]
-  cone_half_angle: 1.4
+  cone_half_angle: 1.5
   # Minimum half angle of the pursuer spawn cone [rad]
-  inner_cone_half_angle: 0.3
+  inner_cone_half_angle: 1.3
   # Enable or disable spawn quadrants relative to the evader heading
   sections:
-    front: true
+    front: false
     left: true
     right: true
-    back: true
+    back: false
   # Minimum initial range from the evader [m]
   min_range: 1000.0
   # Maximum initial range from the evader [m]
@@ -77,4 +77,4 @@ pursuer_start:
   # Radius around the evader target where the pursuer aims initially [m]
   force_target_radius: 500.0
   # Range of random initial speeds [m/s]
-  initial_speed_range: [150.0, 250.0]
+  initial_speed_range: [50.0, 100.0]
