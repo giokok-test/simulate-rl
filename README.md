@@ -36,14 +36,14 @@ override this with `--save-path`.
 
 The script accepts a few command line options to control the training. For
 instance, to run 200 episodes with a smaller learning rate and evaluation every
-20 episodes:
+20 episodes while saving checkpoints every 50 episodes:
 
 ```bash
-python train_pursuer.py --episodes 200 --lr 5e-4 --eval-freq 20
+python train_pursuer.py --episodes 200 --lr 5e-4 --eval-freq 20 --checkpoint-every 50
 ```
 
-The defaults for these options live in ``pursuit_evasion.py`` under
-``config['training']`` and can be modified directly in that file.
+The defaults for these options live in ``config.yaml`` under the
+``training`` section and can be modified directly in that file.
 
 It will print evaluation statistics every ``--eval-freq`` episodes and a final
 summary when training finishes.
@@ -59,7 +59,8 @@ python train_pursuer_ppo.py
 ```
 The command line options are the same as for ``train_pursuer.py`` and the
 trained weights are written to ``pursuer_ppo.pt`` unless ``--save-path`` is
-specified.
+specified. Both training scripts also support ``--checkpoint-every`` to save
+periodic checkpoints and ``--resume-from`` to continue from a saved model.
 
 ## Additional scripts
 
@@ -131,7 +132,9 @@ Similarly, the `stall_angle` parameter in `config.yaml` is given in
 degrees but converted to radians when the environment loads. Actions
 specify yaw and **pitch** where pitch is measured relative to the horizontal
 x–y plane (positive values command an upward climb). Both agents clamp
-their pitch commands to ``[-stall_angle, +stall_angle]``. The
+their pitch commands to ``[-stall_angle, +stall_angle]``. The first action
+component controls acceleration. The pursuer may command negative values
+down to ``-max_acceleration`` to brake. The
 `episode_duration` value defines how long each episode lasts in minutes and
 is used to compute the maximum number of simulation steps based on the
 configured `time_step`.
