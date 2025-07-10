@@ -141,3 +141,42 @@ hits the ground its terminal reward scales with the distance to the target
 using ``target_reward_distance``. A reward of one is given when it reaches the
 goal and it falls off to zero once the evader is roughly 100&nbsp;m away by
 default.
+
+## Sensor error model
+
+The configuration file defines a `measurement_error_pct` option controlling
+the uncertainty in angular measurements of the opposing agent. When the value
+is greater than zero each agent observes the other via noisy right ascension
+(`\alpha`) and declination (`\delta`) angles.  The noise is modelled as a
+percentage of the measured angles:
+
+```
+\alpha' = \alpha + \alpha\,\sigma\,\varepsilon_\alpha 
+\delta' = \delta + \delta\,\sigma\,\varepsilon_\delta
+```
+
+where `\sigma = measurement_error_pct / 100` and `\varepsilon` are standard
+normal variables.  The perturbed angles are converted into a unit direction
+vector
+
+```
+u' = [\cos\delta'\cos\alpha',\; \cos\delta'\sin\alpha',\; \sin\delta'].
+```
+
+If the true range to the target is `R` the observed position becomes
+`p + R u'`.  Linearising around the true angles yields the first order error
+
+```
+\Delta r \approx R\,(\Delta\alpha\,\partial u/\partial\alpha +
+                   \Delta\delta\,\partial u/\partial\delta)
+```
+
+with
+
+```
+\partial u/\partial\alpha = [-\cos\delta\sin\alpha,\; \cos\delta\cos\alpha,\; 0]
+\partial u/\partial\delta = [-\sin\delta\cos\alpha,\; -\sin\delta\sin\alpha,\; \cos\delta].
+```
+
+Velocity is estimated from successive noisy positions so the velocity error is
+the difference of the position errors divided by the simulation time step.

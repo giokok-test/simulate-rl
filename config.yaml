@@ -77,4 +77,6 @@ pursuer_start:
   # Radius around the evader target where the pursuer aims initially [m]
   force_target_radius: 500.0
   # Range of random initial speeds [m/s]
-  initial_speed_range: [50.0, 100.0]
+  initial_speed_range: [50.0, 75.0]
+# Percentage error applied to angular measurements of the opposing agent
+measurement_error_pct: 0.0

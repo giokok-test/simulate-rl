@@ -115,6 +115,7 @@ class PursuitEvasionEnv(gym.Env):
         self.cfg = copy.deepcopy(cfg)
         self.dt = self.cfg['time_step']
         self.shaping_weight = self.cfg.get('shaping_weight', 0.05)
+        self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
         # Convert stall angles provided in degrees to radians once
         self.cfg['evader']['stall_angle'] = np.deg2rad(
             self.cfg['evader']['stall_angle']
@@ -210,6 +211,8 @@ class PursuitEvasionEnv(gym.Env):
         # metrics for episode statistics
         self.min_pe_dist = self.prev_pe_dist
         self.cur_step = 0
+        self._prev_ev_obs = None
+        self._prev_pu_obs = None
         return self._get_obs(), {}
 
     def step(self, action: dict):
@@ -331,6 +334,29 @@ class PursuitEvasionEnv(gym.Env):
             vel[:] = vel / speed * top_speed
         pos[:] = pos + vel * self.dt
 
+    def _observe_enemy(self, observer_pos: np.ndarray, enemy_pos: np.ndarray,
+                        prev_obs: np.ndarray | None) -> tuple[np.ndarray, np.ndarray]:
+        """Return noisy observation of the enemy position and velocity."""
+
+        vec = enemy_pos - observer_pos
+        r = np.linalg.norm(vec) + 1e-8
+        ra = np.arctan2(vec[1], vec[0])
+        dec = np.arcsin(vec[2] / r)
+        if self.meas_err > 0.0:
+            ra += ra * self.meas_err * np.random.randn()
+            dec += dec * self.meas_err * np.random.randn()
+        direction = np.array([
+            np.cos(dec) * np.cos(ra),
+            np.cos(dec) * np.sin(ra),
+            np.sin(dec),
+        ], dtype=np.float32)
+        pos_obs = observer_pos + direction * r
+        if prev_obs is None:
+            vel_obs = enemy_pos - enemy_pos  # zeros
+        else:
+            vel_obs = (pos_obs - prev_obs) / self.dt
+        return pos_obs.astype(np.float32), vel_obs.astype(np.float32)
+
     def _check_done(self):
         """Determine if the episode has terminated."""
         dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
@@ -354,28 +380,42 @@ class PursuitEvasionEnv(gym.Env):
 
     def _get_obs(self):
         """Assemble observations for both agents."""
+        # optionally apply sensor error when observing the opposing agent
+        if self.meas_err > 0.0:
+            ev_pos_obs, ev_vel_obs = self._observe_enemy(
+                self.pursuer_pos, self.evader_pos, getattr(self, "_prev_ev_obs", None)
+            )
+            self._prev_ev_obs = ev_pos_obs
+            pu_pos_obs, pu_vel_obs = self._observe_enemy(
+                self.evader_pos, self.pursuer_pos, getattr(self, "_prev_pu_obs", None)
+            )
+            self._prev_pu_obs = pu_pos_obs
+        else:
+            ev_pos_obs, ev_vel_obs = self.evader_pos, self.evader_vel
+            pu_pos_obs, pu_vel_obs = self.pursuer_pos, self.pursuer_vel
 
         # pursuer observation: own state, evader position and normalized direction
-        direction_pe = self.evader_pos - self.pursuer_pos
+        direction_pe = ev_pos_obs - self.pursuer_pos
         norm_pe = np.linalg.norm(direction_pe) + 1e-8
         obs_p = np.concatenate([
             self.pursuer_pos,
             self.pursuer_vel,
-            self.evader_pos,
+            ev_pos_obs,
             direction_pe / norm_pe,
         ])
+
         # evader observation starts with its own state and the target
         obs_elems = [self.evader_pos, self.evader_vel, self.cfg['target_position']]
         mode = self.cfg['evader'].get('awareness_mode', 1)
         if mode == 2:
-            dist = np.linalg.norm(self.pursuer_pos - self.evader_pos)
+            dist = np.linalg.norm(pu_pos_obs - self.evader_pos)
             obs_elems.append([dist])
         elif mode == 3:
-            direction = self.pursuer_pos - self.evader_pos
+            direction = pu_pos_obs - self.evader_pos
             norm = np.linalg.norm(direction) + 1e-8
             obs_elems.append(direction / norm)
         elif mode >= 4:
-            obs_elems.append(self.pursuer_pos)
+            obs_elems.append(pu_pos_obs)
         obs_e = np.concatenate([np.asarray(x).ravel() for x in obs_elems])
         return {'pursuer': obs_p.astype(np.float32), 'evader': obs_e.astype(np.float32)}
 
