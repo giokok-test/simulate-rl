@@ -146,7 +146,11 @@ class PursuitEvasionEnv(gym.Env):
         self.action_space = gym.spaces.Dict({
             # actions: [acceleration magnitude, azimuth, pitch]
             'pursuer': gym.spaces.Box(
-                low=np.array([0.0, -np.pi, -cfg['pursuer']['stall_angle']], dtype=np.float32),
+                low=np.array([
+                    -cfg['pursuer']['max_acceleration'],
+                    -np.pi,
+                    -cfg['pursuer']['stall_angle'],
+                ], dtype=np.float32),
                 high=np.array([
                     cfg['pursuer']['max_acceleration'],
                     np.pi,
@@ -297,7 +301,7 @@ class PursuitEvasionEnv(gym.Env):
             dir_vec = self.pursuer_force_dir
             gravity = np.zeros(3, dtype=np.float32)
 
-        mag = float(np.clip(action[0], 0.0, max_acc))
+        mag = float(np.clip(action[0], -max_acc, max_acc))
         theta = float(action[1])
         phi = float(np.clip(action[2], -stall, stall))
         target_dir = np.array([
