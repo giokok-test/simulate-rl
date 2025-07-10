@@ -80,10 +80,10 @@ which is useful for quickly checking that the environment works.
   marks the evader's goal position and draws arrows indicating the initial
   heading of both players. During the run a table prints the distance vectors
   between the players and the goal along with the current velocities for both
-  agents. The spawn volume for the pursuer is drawn using dashed green lines so
-  you can verify the configuration visually.
+  agents. The spawn volume for the pursuer is drawn using translucent green
+  surfaces so you can verify the configuration visually.
 - `plot_config.py` renders a stand-alone visualisation of the environment
-  configuration including the spawn volume. The accompanying
+  configuration including the closed spawn volume. The accompanying
   `SpawnVolumeDemo.ipynb` notebook calls this script so you can interactively
   adjust `config.yaml` and inspect the effect.
 
