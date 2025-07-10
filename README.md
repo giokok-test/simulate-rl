@@ -95,7 +95,9 @@ All physical constants and environment options are stored in
 `config.yaml` in the repository root.  Simply edit this file to tweak
 values such as masses, maximum acceleration or the starting distance of
 the pursuer.  The evader's starting position is also randomised using
-the `evader_start.distance_range` and `evader_start.altitude` settings.
+the `evader_start.distance_range` and `evader_start.altitude` settings,
+while `evader_start.initial_speed` controls its initial velocity toward
+the target (within ±15° of the exact bearing).
 Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
 at runtime, so changes take effect the next time you run the scripts.
 

@@ -57,6 +57,8 @@ evader_start:
   distance_range: [8000.0, 12000.0]
   # Starting altitude [m]
   altitude: 3000.0
+  # Initial speed directed toward the target [m/s]
+  initial_speed: 200.0
 pursuer_start:
   # Maximum half angle of the pursuer spawn cone [rad]
   cone_half_angle: 1.4
