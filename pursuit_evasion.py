@@ -29,13 +29,40 @@ def load_config(path: str | None = None) -> dict:
 config = load_config()
 
 
-def sample_pursuer_start(evader_pos: np.ndarray, cfg: dict):
-    """Sample initial pursuer state and force direction."""
-    params = cfg['pursuer_start']
-    cone = params['cone_half_angle']
-    r = np.random.uniform(params['min_range'], params['max_range'])
-    yaw = np.random.uniform(0.0, 2 * np.pi)
-    pitch = np.random.uniform(0.0, cone)
+def sample_pursuer_start(evader_pos: np.ndarray, heading: np.ndarray, cfg: dict):
+    """Sample initial pursuer state and force direction.
+
+    The pursuer spawns inside a truncated cone around the evader. ``heading``
+    defines the reference direction for the four 90° spawn quadrants.
+    """
+
+    params = cfg["pursuer_start"]
+    outer = params["cone_half_angle"]
+    inner = params.get("inner_cone_half_angle", 0.0)
+    r = np.random.uniform(params["min_range"], params["max_range"])
+
+    # choose a spawn quadrant relative to the evader heading
+    base_yaw = np.arctan2(heading[1], heading[0])
+    sections_cfg = params.get(
+        "sections",
+        {"front": True, "left": True, "right": True, "back": True},
+    )
+    quadrants = []
+    deg45 = np.deg2rad(45.0)
+    if sections_cfg.get("front", True):
+        quadrants.append((-deg45, deg45))
+    if sections_cfg.get("right", True):
+        quadrants.append((-deg45 - np.pi / 2, deg45 - np.pi / 2))
+    if sections_cfg.get("back", True):
+        quadrants.append((np.pi - deg45, np.pi + deg45))
+    if sections_cfg.get("left", True):
+        quadrants.append((deg45, deg45 + np.pi / 2))
+    if not quadrants:
+        raise ValueError("No pursuer spawn sections enabled")
+    yaw_rel = np.random.uniform(*quadrants[np.random.randint(len(quadrants))])
+    yaw = (base_yaw + yaw_rel) % (2 * np.pi)
+
+    pitch = np.random.uniform(inner, outer)
     # direction from the evader to the pursuer in world coordinates
     dir_vec = np.array([
         np.sin(pitch) * np.cos(yaw),
@@ -169,7 +196,7 @@ class PursuitEvasionEnv(gym.Env):
         self.evader_force_dir = dir_vec
         self.evader_force_mag = 0.0
 
-        p_pos, p_vel, p_dir = sample_pursuer_start(self.evader_pos, self.cfg)
+        p_pos, p_vel, p_dir = sample_pursuer_start(self.evader_pos, heading, self.cfg)
         self.pursuer_pos = p_pos.astype(np.float32)
         self.pursuer_vel = p_vel.astype(np.float32)
         self.pursuer_force_dir = p_dir.astype(np.float32)

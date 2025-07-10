@@ -62,6 +62,14 @@ evader_start:
 pursuer_start:
   # Maximum half angle of the pursuer spawn cone [rad]
   cone_half_angle: 1.4
+  # Minimum half angle of the pursuer spawn cone [rad]
+  inner_cone_half_angle: 0.3
+  # Enable or disable spawn quadrants relative to the evader heading
+  sections:
+    front: true
+    left: true
+    right: true
+    back: true
   # Minimum initial range from the evader [m]
   min_range: 1000.0
   # Maximum initial range from the evader [m]

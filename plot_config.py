@@ -27,6 +27,35 @@ def draw_cone(ax, apex, angle, r_min, r_max, **kw):
         ax.plot(x, y, z, **kw)
 
 
+def draw_spawn_volume(ax, apex, inner, outer, r_min, r_max, yaw_ranges, **kw):
+    """Visualise the pursuer spawn volume."""
+    for yaw_start, yaw_end in yaw_ranges:
+        theta = np.linspace(yaw_start, yaw_end, 30)
+        for r in np.linspace(r_min, r_max, 4):
+            # outer boundary
+            x = apex[0] + r * np.sin(outer) * np.cos(theta)
+            y = apex[1] + r * np.sin(outer) * np.sin(theta)
+            z = apex[2] - r * np.cos(outer)
+            ax.plot(x, y, z, **kw)
+            # inner boundary
+            if inner > 0:
+                x = apex[0] + r * np.sin(inner) * np.cos(theta)
+                y = apex[1] + r * np.sin(inner) * np.sin(theta)
+                z = apex[2] - r * np.cos(inner)
+                ax.plot(x, y, z, **kw)
+        # side edges
+        for ang in [yaw_start, yaw_end]:
+            x = apex[0] + np.array([r_min, r_max]) * np.sin(outer) * np.cos(ang)
+            y = apex[1] + np.array([r_min, r_max]) * np.sin(outer) * np.sin(ang)
+            z = apex[2] - np.array([r_min, r_max]) * np.cos(outer)
+            ax.plot(x, y, z, **kw)
+            if inner > 0:
+                x = apex[0] + np.array([r_min, r_max]) * np.sin(inner) * np.cos(ang)
+                y = apex[1] + np.array([r_min, r_max]) * np.sin(inner) * np.sin(ang)
+                z = apex[2] - np.array([r_min, r_max]) * np.cos(inner)
+                ax.plot(x, y, z, **kw)
+
+
 def main():
     cfg = load_config()
     target = np.array(cfg["target_position"], dtype=float)
@@ -58,19 +87,38 @@ def main():
     draw_ring(ax, target[:2], d_min, altitude, color="blue", linestyle="--")
     draw_ring(ax, target[:2], d_max, altitude, color="blue")
 
-    # pursuer spawn cone
+    # pursuer spawn volume (outer & inner cone with quadrant selection)
     p_cfg = cfg["pursuer_start"]
-    angle = p_cfg["cone_half_angle"]
-    draw_cone(
+    outer = p_cfg["cone_half_angle"]
+    inner = p_cfg.get("inner_cone_half_angle", 0.0)
+    sections = p_cfg.get(
+        "sections",
+        {"front": True, "left": True, "right": True, "back": True},
+    )
+    base_yaw = 0.0  # evader heading points along +x for this example
+    deg45 = np.deg2rad(45.0)
+    ranges = []
+    if sections.get("front", True):
+        ranges.append((base_yaw - deg45, base_yaw + deg45))
+    if sections.get("right", True):
+        ranges.append((base_yaw - np.pi/2 - deg45, base_yaw - np.pi/2 + deg45))
+    if sections.get("back", True):
+        ranges.append((base_yaw + np.pi - deg45, base_yaw + np.pi + deg45))
+    if sections.get("left", True):
+        ranges.append((base_yaw + deg45, base_yaw + np.pi/2 + deg45))
+
+    draw_spawn_volume(
         ax,
         evader_pos,
-        angle,
+        inner,
+        outer,
         p_cfg["min_range"],
         p_cfg["max_range"],
+        ranges,
         color="green",
         linestyle="--",
     )
-    ax.text(*(evader_pos - [0, 0, p_cfg["min_range"]]), "pursuer spawn cone", color="green")
+    ax.text(*(evader_pos - [0, 0, p_cfg["min_range"]]), "pursuer spawn volume", color="green")
 
     # capture radius sphere around evader
     cap_r = cfg["capture_radius"]

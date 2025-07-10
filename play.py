@@ -9,6 +9,31 @@ from train_pursuer import PursuerOnlyEnv
 from train_pursuer_ppo import ActorCritic
 
 
+def draw_spawn_volume(ax, apex, inner, outer, r_min, r_max, yaw_ranges, **kw):
+    for yaw_start, yaw_end in yaw_ranges:
+        theta = np.linspace(yaw_start, yaw_end, 30)
+        for r in np.linspace(r_min, r_max, 3):
+            x = apex[0] + r * np.sin(outer) * np.cos(theta)
+            y = apex[1] + r * np.sin(outer) * np.sin(theta)
+            z = apex[2] - r * np.cos(outer)
+            ax.plot(x, y, z, **kw)
+            if inner > 0:
+                x = apex[0] + r * np.sin(inner) * np.cos(theta)
+                y = apex[1] + r * np.sin(inner) * np.sin(theta)
+                z = apex[2] - r * np.cos(inner)
+                ax.plot(x, y, z, **kw)
+        for ang in [yaw_start, yaw_end]:
+            x = apex[0] + np.array([r_min, r_max]) * np.sin(outer) * np.cos(ang)
+            y = apex[1] + np.array([r_min, r_max]) * np.sin(outer) * np.sin(ang)
+            z = apex[2] - np.array([r_min, r_max]) * np.cos(outer)
+            ax.plot(x, y, z, **kw)
+            if inner > 0:
+                x = apex[0] + np.array([r_min, r_max]) * np.sin(inner) * np.cos(ang)
+                y = apex[1] + np.array([r_min, r_max]) * np.sin(inner) * np.sin(ang)
+                z = apex[2] - np.array([r_min, r_max]) * np.cos(inner)
+                ax.plot(x, y, z, **kw)
+
+
 def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = None) -> None:
     cfg = load_config()
     cfg['evader']['awareness_mode'] = 1
@@ -28,6 +53,7 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
     # store initial headings before the environment steps
     p_init_dir = env.env.pursuer_force_dir.copy()
     e_init_dir = env.env.evader_force_dir.copy()
+    heading_dir = env.env.evader_vel / (np.linalg.norm(env.env.evader_vel) + 1e-8)
     # collect positions for plotting
     pursuer_traj = [env.env.pursuer_pos.copy()]
     evader_traj = [env.env.evader_pos.copy()]
@@ -87,6 +113,37 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
     # Plot the trajectories in 3D
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
+
+    # visualize spawn volume
+    p_cfg = env.env.cfg["pursuer_start"]
+    outer = p_cfg["cone_half_angle"]
+    inner = p_cfg.get("inner_cone_half_angle", 0.0)
+    sections = p_cfg.get(
+        "sections",
+        {"front": True, "left": True, "right": True, "back": True},
+    )
+    deg45 = np.deg2rad(45.0)
+    base_yaw = np.arctan2(heading_dir[1], heading_dir[0])
+    ranges = []
+    if sections.get("front", True):
+        ranges.append((base_yaw - deg45, base_yaw + deg45))
+    if sections.get("right", True):
+        ranges.append((base_yaw - np.pi / 2 - deg45, base_yaw - np.pi / 2 + deg45))
+    if sections.get("back", True):
+        ranges.append((base_yaw + np.pi - deg45, base_yaw + np.pi + deg45))
+    if sections.get("left", True):
+        ranges.append((base_yaw + deg45, base_yaw + np.pi / 2 + deg45))
+    draw_spawn_volume(
+        ax,
+        env.env.evader_pos,
+        inner,
+        outer,
+        p_cfg["min_range"],
+        p_cfg["max_range"],
+        ranges,
+        color="green",
+        linestyle="--",
+    )
     p = np.stack(pursuer_traj)
     e = np.stack(evader_traj)
     ax.plot(p[:, 0], p[:, 1], p[:, 2], label="pursuer")
