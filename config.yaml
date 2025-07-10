@@ -53,6 +53,8 @@ target_reward_distance: 100.0
 shaping_weight: 0.05
 # Additional reward weight for simply getting closer to the evader each step
 closer_weight: 0.05
+# Additional reward weight for reducing the pursuer-to-evader angle
+angle_weight: 0.0
 # Coordinates of the evader's goal [m]
 target_position: [0, 0.0, 0.0]
 evader_start:

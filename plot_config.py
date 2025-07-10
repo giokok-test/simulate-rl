@@ -221,6 +221,7 @@ def main():
         f"time step: {cfg['time_step']} s\n"
         f"episode duration: {cfg.get('episode_duration', 0.0)} min\n"
         f"shaping weight: {cfg['shaping_weight']}\n"
+        f"angle weight: {cfg.get('angle_weight', 0.0)}\n"
     )
     fig.text(0.01, 0.95, evader_txt, fontsize=9, va="top")
     fig.text(0.25, 0.95, pursuer_txt, fontsize=9, va="top")
