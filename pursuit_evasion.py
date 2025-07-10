@@ -209,6 +209,8 @@ class PursuitEvasionEnv(gym.Env):
                 info['outcome'] = 'capture'
             elif self.evader_pos[2] <= 0.0 and dist_target < self.cfg['capture_radius'] * 5:
                 info['outcome'] = 'evader_target'
+            elif dist_pe >= 2 * self.start_pe_dist:
+                info['outcome'] = 'separation_exceeded'
 
         self.cur_step += 1
         return obs, reward, done, False, info
@@ -287,6 +289,8 @@ class PursuitEvasionEnv(gym.Env):
         dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
         if dist <= self.cfg['capture_radius']:
             return True, -1.0, 1.0
+        if dist >= 2 * self.start_pe_dist:
+            return True, 0.0, 0.0
         # check if the evader hit the ground near the target
         target = np.array(self.cfg['target_position'], dtype=np.float32)
         if (self.evader_pos[2] <= 0.0 and np.linalg.norm(self.evader_pos - target) < self.cfg['capture_radius'] * 5):
