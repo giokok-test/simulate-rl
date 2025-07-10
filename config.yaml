@@ -82,3 +82,14 @@ pursuer_start:
   initial_speed_range: [50.0, 75.0]
 # Percentage error applied to angular measurements of the opposing agent
 measurement_error_pct: 0.0
+
+# Training related options
+training:
+  # Number of training episodes
+  episodes: 5000
+  # Optimiser learning rate
+  learning_rate: 0.001
+  # Run evaluation episodes every this many training episodes
+  eval_freq: 1000
+  # Save a checkpoint every this many episodes. Set to 0 to disable.
+  checkpoint_steps: 0
