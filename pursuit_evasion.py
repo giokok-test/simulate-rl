@@ -36,16 +36,13 @@ def sample_pursuer_start(evader_pos: np.ndarray, cfg: dict):
     r = np.random.uniform(params['min_range'], params['max_range'])
     yaw = np.random.uniform(0.0, 2 * np.pi)
     pitch = np.random.uniform(0.0, cone)
-    # direction from evader to pursuer in world frame (beneath the evader)
+    # direction from the evader to the pursuer in world coordinates
     dir_vec = np.array([
         np.sin(pitch) * np.cos(yaw),
         np.sin(pitch) * np.sin(yaw),
         -np.cos(pitch),
     ], dtype=np.float32)
     pos = evader_pos + dir_vec * r
-
-    speed = np.random.uniform(*params['initial_speed_range'])
-    vel = dir_vec * speed
 
     # point the initial force vector toward a random point near the evader
     tgt_offset = np.random.randn(3).astype(np.float32)
@@ -54,6 +51,10 @@ def sample_pursuer_start(evader_pos: np.ndarray, cfg: dict):
     tgt = evader_pos + tgt_offset
     to_tgt = tgt - pos
     to_tgt /= np.linalg.norm(to_tgt) + 1e-8
+
+    speed = np.random.uniform(*params['initial_speed_range'])
+    # initial velocity aligned with the chosen target direction
+    vel = to_tgt * speed
     return pos, vel, to_tgt
 
 

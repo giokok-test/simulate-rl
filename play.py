@@ -66,10 +66,8 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
     ax.plot(e[:, 0], e[:, 1], e[:, 2], label="evader")
     # draw arrows showing the initial heading for both agents
     arrow_len = 1000.0
-    p_dir = env.env.pursuer_vel
-    p_norm = np.linalg.norm(p_dir)
-    if p_norm > 1e-6:
-        p_dir = p_dir / p_norm
+    p_dir = env.env.pursuer_force_dir
+    p_dir = p_dir / (np.linalg.norm(p_dir) + 1e-8)
     e_dir = env.env.evader_force_dir
     e_dir = e_dir / (np.linalg.norm(e_dir) + 1e-8)
     ax.quiver(
