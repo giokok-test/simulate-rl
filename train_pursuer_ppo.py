@@ -10,6 +10,34 @@ import torch.optim as optim
 import gymnasium as gym
 from typing import Optional
 
+TABLE_HEADER = (
+    f"{'step':>5} | {'pursuer→evader [m]':>26} | "
+    f"{'evader→target [m]':>26} | {'pursuer vel [m/s]':>26} | "
+    f"{'evader vel [m/s]':>26} | {'p dir':>18} | "
+    f"{'e dir':>18} | {'p→e dir':>18}"
+)
+
+
+def _format_row(step: int, env: PursuitEvasionEnv) -> str:
+    target_pos = np.asarray(env.cfg["target_position"], dtype=float)
+    pe_vec = env.evader_pos - env.pursuer_pos
+    et_vec = target_pos - env.evader_pos
+    pv = env.pursuer_vel
+    ev = env.evader_vel
+    pv_u = pv / (np.linalg.norm(pv) + 1e-8)
+    ev_u = ev / (np.linalg.norm(ev) + 1e-8)
+    pe_u = pe_vec / (np.linalg.norm(pe_vec) + 1e-8)
+    return (
+        f"{step:5d} | "
+        f"[{pe_vec[0]:7.1f} {pe_vec[1]:7.1f} {pe_vec[2]:7.1f}] | "
+        f"[{et_vec[0]:7.1f} {et_vec[1]:7.1f} {et_vec[2]:7.1f}] | "
+        f"[{pv[0]:7.1f} {pv[1]:7.1f} {pv[2]:7.1f}] | "
+        f"[{ev[0]:7.1f} {ev[1]:7.1f} {ev[2]:7.1f}] | "
+        f"[{pv_u[0]:6.2f} {pv_u[1]:6.2f} {pv_u[2]:6.2f}] | "
+        f"[{ev_u[0]:6.2f} {ev_u[1]:6.2f} {ev_u[2]:6.2f}] | "
+        f"[{pe_u[0]:6.2f} {pe_u[1]:6.2f} {pe_u[2]:6.2f}]"
+    )
+
 from pursuit_evasion import (
     PursuitEvasionEnv,
     PursuerPolicy,
@@ -204,6 +232,7 @@ def train(
         obs_list = []
         actions = []
         info = {}
+        rows = []
         start_d = env.start_distance
         target = np.asarray(env.env.cfg["target_position"], dtype=float)
         first_rows: list[str] = []
@@ -216,6 +245,7 @@ def train(
             action = dist.sample()
             log_prob = dist.log_prob(action).sum()
             next_obs, r, done, _, info = env.step(action.cpu().numpy())
+            rows.append(_format_row(len(rows), env.env))
             log_probs.append(log_prob.detach())
             values.append(value.detach())
             rewards.append(r)
@@ -275,6 +305,13 @@ def train(
                 f"outcome={info.get('outcome', 'timeout')} start={start_d:.2f} "
                 f"min={info.get('min_distance', float('nan')):.2f}"
             )
+            print(TABLE_HEADER)
+            for row in rows[:3]:
+                print(row)
+            if len(rows) > 6:
+                print("...")
+            for row in rows[-3:]:
+                print(row)
 
         if (episode + 1) % eval_freq == 0:
             avg_r, success = evaluate(model, PursuerOnlyEnv(cfg))
