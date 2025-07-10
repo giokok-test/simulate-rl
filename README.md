@@ -149,18 +149,26 @@ the uncertainty in angular measurements of the opposing agent. When the value
 is greater than zero each agent observes the other via noisy right ascension
 ($\alpha$) and declination ($\delta$) angles. The noise is modelled as a
 percentage of the measured angles, where
-$\sigma = \frac{\mathrm{measurement\_error\_pct}}{100},$
+
+$\sigma = \frac{\mathrm{measurement\_error\pct}}{100},$
+
 and the perturbed angles satisfy
+
 $\alpha' = \alpha + \alpha\,\sigma\,\varepsilon_\alpha, \quad\delta' = \delta + \delta\,\sigma\,\varepsilon_\delta,$
+
 with $\varepsilon_\alpha,\varepsilon_\delta\sim\mathcal{N}(0,1)$.
 
 These are converted into a unit direction vector:
+
 $u' = \bigl[\cos\delta'\cos\alpha',\;\cos\delta'\sin\alpha',\;\sin\delta'\bigr].$
 
 If the true range to the target is $R$, the observed position becomes
 $p + R\,u'$.  Linearising around the true angles yields the first‐order error
+
 $\Delta r \approx R\bigl(\Delta\alpha\,\partial u/\partial\alpha + \Delta\delta\,\partial u/\partial\delta\bigr),$
+
 where
+
 $\frac{\partial u}{\partial\alpha} = \bigl[-\cos\delta\sin\alpha,\;\cos\delta\cos\alpha,\;0\bigr],\quad\frac{\partial u}{\partial\delta} = \bigl[-\sin\delta\cos\alpha,\;-\sin\delta\sin\alpha,\;\cos\delta\bigr].$
 
 Velocity is then estimated from successive noisy positions, so the velocity
