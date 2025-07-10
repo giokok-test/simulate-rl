@@ -147,36 +147,34 @@ default.
 The configuration file defines a `measurement_error_pct` option controlling
 the uncertainty in angular measurements of the opposing agent. When the value
 is greater than zero each agent observes the other via noisy right ascension
-(`\alpha`) and declination (`\delta`) angles.  The noise is modelled as a
-percentage of the measured angles:
+($\alpha$) and declination ($\delta$) angles. The noise is modelled as a
+percentage of the measured angles, where
+$$
+\sigma = \frac{\mathrm{measurement\_error\_pct}}{100},
+$$
+and the perturbed angles satisfy
+$$
+\alpha' = \alpha + \alpha\,\sigma\,\varepsilon_\alpha, \quad
+\delta' = \delta + \delta\,\sigma\,\varepsilon_\delta,
+$$
+with $\varepsilon_\alpha,\varepsilon_\delta\sim\mathcal{N}(0,1)$.
 
-```
-\alpha' = \alpha + \alpha\,\sigma\,\varepsilon_\alpha 
-\delta' = \delta + \delta\,\sigma\,\varepsilon_\delta
-```
+These are converted into a unit direction vector:
+$$
+u' = \bigl[\cos\delta'\cos\alpha',\;\cos\delta'\sin\alpha',\;\sin\delta'\bigr].
+$$
 
-where `\sigma = measurement_error_pct / 100` and `\varepsilon` are standard
-normal variables.  The perturbed angles are converted into a unit direction
-vector
+If the true range to the target is $R$, the observed position becomes
+$p + R\,u'$.  Linearising around the true angles yields the first‐order error
+$$
+\Delta r \approx R\bigl(\Delta\alpha\,\partial u/\partial\alpha +
+                   \Delta\delta\,\partial u/\partial\delta\bigr),
+$$
+where
+$$
+\frac{\partial u}{\partial\alpha} = \bigl[-\cos\delta\sin\alpha,\;\cos\delta\cos\alpha,\;0\bigr],\quad
+\frac{\partial u}{\partial\delta} = \bigl[-\sin\delta\cos\alpha,\;-\sin\delta\sin\alpha,\;\cos\delta\bigr].
+$$
 
-```
-u' = [\cos\delta'\cos\alpha',\; \cos\delta'\sin\alpha',\; \sin\delta'].
-```
-
-If the true range to the target is `R` the observed position becomes
-`p + R u'`.  Linearising around the true angles yields the first order error
-
-```
-\Delta r \approx R\,(\Delta\alpha\,\partial u/\partial\alpha +
-                   \Delta\delta\,\partial u/\partial\delta)
-```
-
-with
-
-```
-\partial u/\partial\alpha = [-\cos\delta\sin\alpha,\; \cos\delta\cos\alpha,\; 0]
-\partial u/\partial\delta = [-\sin\delta\cos\alpha,\; -\sin\delta\sin\alpha,\; \cos\delta].
-```
-
-Velocity is estimated from successive noisy positions so the velocity error is
-the difference of the position errors divided by the simulation time step.
+Velocity is then estimated from successive noisy positions, so the velocity
+error is the difference of the position errors divided by the simulation time step.
