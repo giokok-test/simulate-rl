@@ -43,21 +43,21 @@ gravity: 9.81
 # Simulation time step [s]
 time_step: 0.1
 # Duration of one episode [min]
-episode_duration: 0.1
+episode_duration: 40
 # Distance at which capture is considered successful [m]
 capture_radius: 1.0
 # Weight for shaping rewards
 shaping_weight: 0.05
 # Coordinates of the evader's goal [m]
-target_position: [1000.0, 0.0, 0.0]
+target_position: [0, 0.0, 0.0]
 evader_start:
   # Range of initial horizontal distance from the goal [m]
-  distance_range: [800.0, 1200.0]
+  distance_range: [8000.0, 12000.0]
   # Starting altitude [m]
   altitude: 3000.0
 pursuer_start:
   # Maximum half angle of the pursuer spawn cone [rad]
-  cone_half_angle: 0.7853981633974483
+  cone_half_angle: 1.4
   # Minimum initial range from the evader [m]
   min_range: 1000.0
   # Maximum initial range from the evader [m]
@@ -65,4 +65,4 @@ pursuer_start:
   # Radius around the evader target where the pursuer aims initially [m]
   force_target_radius: 500.0
   # Range of random initial speeds [m/s]
-  initial_speed_range: [0.0, 50.0]
+  initial_speed_range: [150.0, 250.0]

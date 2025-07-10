@@ -195,9 +195,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     training_cfg = config.setdefault('training', {
-        'episodes': 100,
+        'episodes': 500,
         'learning_rate': 1e-3,
-        'eval_freq': 10,
+        'eval_freq': 50,
     })
     if args.episodes is not None:
         training_cfg['episodes'] = args.episodes
