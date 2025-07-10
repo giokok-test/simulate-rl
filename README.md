@@ -76,8 +76,9 @@ which is useful for quickly checking that the environment works.
   flag when loading a model trained with the PPO script. Episodes run for the
   duration specified by `episode_duration` in `config.yaml` unless `--steps` is
   used to override the maximum number of simulation steps.
-  The plot now highlights the starting and final positions of both agents and
-  marks the evader's goal position.
+  The plot now highlights the starting and final positions of both agents,
+  marks the evader's goal position and draws arrows indicating the initial
+  heading of both players.
 
 The environment stores several statistics for each episode. When an episode
 finishes the ``info`` dictionary returned from ``env.step`` contains the
