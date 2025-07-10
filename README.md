@@ -48,6 +48,23 @@ The defaults for these options live in ``config.yaml`` under the
 It will print evaluation statistics every ``--eval-freq`` episodes and a final
 summary when training finishes.
 
+### Monitoring training with TensorBoard
+
+Both training scripts can write metrics for visualization with TensorBoard.
+Pass ``--log-dir`` to specify where logs should be stored. For example:
+
+```bash
+python train_pursuer.py --log-dir runs/reinforce
+```
+
+Start TensorBoard with
+
+```bash
+tensorboard --logdir runs
+```
+
+This will show episode rewards, evaluation results and losses during training.
+
 ### PPO variant
 
 For a more stable actor--critic approach, run the ``train_pursuer_ppo.py``
