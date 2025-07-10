@@ -80,7 +80,12 @@ which is useful for quickly checking that the environment works.
   marks the evader's goal position and draws arrows indicating the initial
   heading of both players. During the run a table prints the distance vectors
   between the players and the goal along with the current velocities for both
-  agents.
+  agents. The spawn volume for the pursuer is drawn using dashed green lines so
+  you can verify the configuration visually.
+- `plot_config.py` renders a stand-alone visualisation of the environment
+  configuration including the spawn volume. The accompanying
+  `SpawnVolumeDemo.ipynb` notebook calls this script so you can interactively
+  adjust `config.yaml` and inspect the effect.
 
 The environment stores several statistics for each episode. When an episode
 finishes the ``info`` dictionary returned from ``env.step`` contains the
@@ -98,6 +103,17 @@ the pursuer.  The evader's starting position is also randomised using
 the `evader_start.distance_range` and `evader_start.altitude` settings,
 while `evader_start.initial_speed` controls its initial velocity toward
 the target (within ±15° of the exact bearing).
+
+The pursuer's starting position is sampled inside a configurable volume.
+`pursuer_start.cone_half_angle` sets the outer limit of the spawn cone
+below the evader while `pursuer_start.inner_cone_half_angle` specifies an
+inner cutoff to avoid very steep spawn angles.  The `sections` dictionary
+divides the horizontal plane around the evader into four 90° quadrants
+(`front`, `right`, `back`, `left`) relative to the evader's initial
+heading.  Each section can be enabled or disabled to further restrict the
+spawn volume.  Combined with the `min_range` and `max_range` distances
+these options define where the pursuer may appear at the beginning of an
+episode.
 Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
 at runtime, so changes take effect the next time you run the scripts.
 
