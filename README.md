@@ -132,7 +132,9 @@ Similarly, the `stall_angle` parameter in `config.yaml` is given in
 degrees but converted to radians when the environment loads. Actions
 specify yaw and **pitch** where pitch is measured relative to the horizontal
 x–y plane (positive values command an upward climb). Both agents clamp
-their pitch commands to ``[-stall_angle, +stall_angle]``. The
+their pitch commands to ``[-stall_angle, +stall_angle]``. The first action
+component controls acceleration. The pursuer may command negative values
+down to ``-max_acceleration`` to brake. The
 `episode_duration` value defines how long each episode lasts in minutes and
 is used to compute the maximum number of simulation steps based on the
 configured `time_step`.
