@@ -115,6 +115,10 @@ class PursuitEvasionEnv(gym.Env):
         self.cfg = copy.deepcopy(cfg)
         self.dt = self.cfg['time_step']
         self.shaping_weight = self.cfg.get('shaping_weight', 0.05)
+        # Additional shaping when the pursuer decreases its distance to the
+        # evader between consecutive steps. This complements the basic shaping
+        # reward above which encourages closing the gap proportionally.
+        self.closer_weight = self.cfg.get('closer_weight', 0.0)
         self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
         # Convert stall angles provided in degrees to radians once
         self.cfg['evader']['stall_angle'] = np.deg2rad(
@@ -236,12 +240,19 @@ class PursuitEvasionEnv(gym.Env):
         self.min_pe_dist = min(self.min_pe_dist, dist_pe)
         shape_p = self.prev_pe_dist - dist_pe
         shape_e = self.prev_target_dist - dist_target
+        # Bonus reward when the pursuer reduces the distance compared to the
+        # previous step. This explicitly incentivises consistent progress
+        # toward the evader regardless of terminal rewards.
+        closer_bonus = 0.0
+        if self.closer_weight > 0.0 and dist_pe < self.prev_pe_dist:
+            closer_bonus = self.closer_weight * (self.prev_pe_dist - dist_pe)
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
 
         done, r_e, r_p = self._check_done()
         r_e += self.shaping_weight * shape_e
         r_p += self.shaping_weight * shape_p
+        r_p += closer_bonus
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
         info = {}

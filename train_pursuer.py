@@ -207,10 +207,12 @@ def train(cfg: dict, save_path: Optional[str] = None):
             print(row)
         for row in last_rows:
             print(row)
+        episode_reward = sum(rewards)
         if info:
             print(
-                f"Episode {episode+1}: outcome={info.get('outcome', 'timeout')} "
-                f"start={start_d:.2f} min={info.get('min_distance', float('nan')):.2f}"
+                f"Episode {episode+1}: reward={episode_reward:.2f} "
+                f"outcome={info.get('outcome', 'timeout')} start={start_d:.2f} "
+                f"min={info.get('min_distance', float('nan')):.2f}"
             )
         if (episode + 1) % eval_freq == 0:
             # Periodically report progress on separate evaluation episodes

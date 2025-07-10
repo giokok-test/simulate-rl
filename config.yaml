@@ -50,6 +50,8 @@ capture_radius: 1.0
 target_reward_distance: 100.0
 # Weight for shaping rewards
 shaping_weight: 0.05
+# Additional reward weight for simply getting closer to the evader each step
+closer_weight: 0.05
 # Coordinates of the evader's goal [m]
 target_position: [0, 0.0, 0.0]
 evader_start:
