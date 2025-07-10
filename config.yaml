@@ -46,6 +46,8 @@ time_step: 0.1
 episode_duration: 40
 # Distance at which capture is considered successful [m]
 capture_radius: 1.0
+# Distance within which the evader receives reward when hitting the ground [m]
+target_reward_distance: 100.0
 # Weight for shaping rewards
 shaping_weight: 0.05
 # Coordinates of the evader's goal [m]

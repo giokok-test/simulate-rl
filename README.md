@@ -115,3 +115,9 @@ their pitch commands to ``[-stall_angle, +stall_angle]``. The
 `episode_duration` value defines how long each episode lasts in minutes and
 is used to compute the maximum number of simulation steps based on the
 configured `time_step`.
+
+When either agent touches the ground the episode terminates. If the evader
+hits the ground its terminal reward scales with the distance to the target
+using ``target_reward_distance``. A reward of one is given when it reaches the
+goal and it falls off to zero once the evader is roughly 100&nbsp;m away by
+default.

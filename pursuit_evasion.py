@@ -67,6 +67,10 @@ class PursuitEvasionEnv(gym.Env):
     maximum acceleration and drag. Observations and actions are represented as
     simple ``numpy`` arrays so the environment can be easily used with
     standard RL libraries.
+
+    Episodes terminate if either agent's altitude drops below zero. When the
+    evader hits the ground its terminal reward is scaled by the distance to the
+    goal using ``target_reward_distance`` from the configuration.
     """
 
     def __init__(self, cfg: dict):
@@ -208,8 +212,10 @@ class PursuitEvasionEnv(gym.Env):
             }
             if dist_pe <= self.cfg['capture_radius']:
                 info['outcome'] = 'capture'
-            elif self.evader_pos[2] <= 0.0 and dist_target < self.cfg['capture_radius'] * 5:
-                info['outcome'] = 'evader_target'
+            elif self.evader_pos[2] < 0.0:
+                info['outcome'] = 'evader_ground'
+            elif self.pursuer_pos[2] < 0.0:
+                info['outcome'] = 'pursuer_ground'
             elif dist_pe >= 2 * self.start_pe_dist:
                 info['outcome'] = 'separation_exceeded'
 
@@ -288,14 +294,22 @@ class PursuitEvasionEnv(gym.Env):
     def _check_done(self):
         """Determine if the episode has terminated."""
         dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
+        target = np.array(self.cfg['target_position'], dtype=np.float32)
+        dist_target = np.linalg.norm(self.evader_pos - target)
+
         if dist <= self.cfg['capture_radius']:
             return True, -1.0, 1.0
         if dist >= 2 * self.start_pe_dist:
             return True, 0.0, 0.0
-        # check if the evader hit the ground near the target
-        target = np.array(self.cfg['target_position'], dtype=np.float32)
-        if (self.evader_pos[2] <= 0.0 and np.linalg.norm(self.evader_pos - target) < self.cfg['capture_radius'] * 5):
-            return True, 1.0, -1.0
+
+        # episode ends if either agent goes below ground level
+        if self.pursuer_pos[2] < 0.0:
+            return True, 0.0, -1.0
+        if self.evader_pos[2] < 0.0:
+            max_d = self.cfg.get('target_reward_distance', 100.0)
+            reward = max(0.0, 1.0 - (dist_target / max_d) ** 2)
+            return True, reward, 0.0
+
         return False, 0.0, 0.0
 
     def _get_obs(self):
