@@ -32,9 +32,20 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
     pursuer_traj = [env.env.pursuer_pos.copy()]
     evader_traj = [env.env.evader_pos.copy()]
 
+    # print table header showing distance vectors and velocities
+    header = (
+        f"{'step':>5} | {'pursuer→evader [m]':>26} | "
+        f"{'evader→target [m]':>26} | {'pursuer vel [m/s]':>26} | "
+        f"{'evader vel [m/s]':>26}"
+    )
+    print(header)
+    print("-" * len(header))
+
     done = False
     total_reward = 0.0
     info = {}
+    step = 0
+    target_pos = np.asarray(env.env.cfg["target_position"], dtype=float)
     while not done:
         with torch.no_grad():
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
@@ -47,6 +58,19 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
         obs, r, done, _, info = env.step(action.cpu().numpy())
         pursuer_traj.append(env.env.pursuer_pos.copy())
         evader_traj.append(env.env.evader_pos.copy())
+        # compute vectors and velocities for table output
+        pe_vec = env.env.evader_pos - env.env.pursuer_pos
+        et_vec = target_pos - env.env.evader_pos
+        pv = env.env.pursuer_vel
+        ev = env.env.evader_vel
+        print(
+            f"{step:5d} | "
+            f"[{pe_vec[0]:7.1f} {pe_vec[1]:7.1f} {pe_vec[2]:7.1f}] | "
+            f"[{et_vec[0]:7.1f} {et_vec[1]:7.1f} {et_vec[2]:7.1f}] | "
+            f"[{pv[0]:7.1f} {pv[1]:7.1f} {pv[2]:7.1f}] | "
+            f"[{ev[0]:7.1f} {ev[1]:7.1f} {ev[2]:7.1f}]"
+        )
+        step += 1
         total_reward += r
 
     print(f"Episode reward: {total_reward:.2f}")
