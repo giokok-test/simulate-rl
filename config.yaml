@@ -78,3 +78,5 @@ pursuer_start:
   force_target_radius: 500.0
   # Range of random initial speeds [m/s]
   initial_speed_range: [150.0, 250.0]
+# Percentage error applied to angular measurements of the opposing agent
+measurement_error_pct: 0.0
