@@ -9,7 +9,7 @@ from train_pursuer import PursuerOnlyEnv
 from train_pursuer_ppo import ActorCritic
 
 
-def run_episode(model_path: str, use_ppo: bool = False, max_steps: int = 20) -> None:
+def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = None) -> None:
     cfg = load_config()
     cfg['evader']['awareness_mode'] = 1
     env = PursuerOnlyEnv(cfg, max_steps=max_steps)
@@ -53,6 +53,7 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int = 20) -> 
         print(
             f"Steps: {info.get('episode_steps', 'n/a')}  "
             f"closest={closest}  "
+            f"start={info.get('start_distance', float('nan')):.2f}  "
             f"outcome={info.get('outcome', 'unknown')}"
         )
 
@@ -137,8 +138,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--steps",
         type=int,
-        default=60,
-        help="maximum number of steps before timing out",
+        default=None,
+        help="override maximum episode steps",
     )
     args = parser.parse_args()
 

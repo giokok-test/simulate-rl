@@ -109,6 +109,7 @@ def main():
     global_txt = (
         f"gravity: {cfg['gravity']} m/s^2\n"
         f"time step: {cfg['time_step']} s\n"
+        f"episode duration: {cfg.get('episode_duration', 0.0)} min\n"
         f"shaping weight: {cfg['shaping_weight']}\n"
     )
     fig.text(0.01, 0.95, evader_txt, fontsize=9, va="top")
