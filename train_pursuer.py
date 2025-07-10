@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 import argparse
 import numpy as np
 import torch
@@ -244,7 +247,7 @@ if __name__ == "__main__":
     training_cfg = config.setdefault('training', {
         'episodes': 5000,
         'learning_rate': 1e-3,
-        'eval_freq': 150,
+        'eval_freq': 1000,
     })
     if args.episodes is not None:
         training_cfg['episodes'] = args.episodes
