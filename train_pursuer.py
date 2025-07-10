@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 import argparse
+import os
 import numpy as np
 import torch
 import torch.nn as nn
@@ -135,7 +136,13 @@ def evaluate(policy: PursuerPolicy, env: PursuerOnlyEnv, episodes: int = 5) -> t
     return float(np.mean(rewards)), successes / episodes
 
 
-def train(cfg: dict, save_path: Optional[str] = None):
+def train(
+    cfg: dict,
+    save_path: Optional[str] = None,
+    *,
+    checkpoint_every: int | None = None,
+    resume_from: str | None = None,
+):
     """Train the pursuer policy with REINFORCE.
 
     Parameters
@@ -143,16 +150,28 @@ def train(cfg: dict, save_path: Optional[str] = None):
     cfg:
         Configuration dictionary. Expected to contain a ``training`` section
         specifying ``episodes``, ``learning_rate`` and ``eval_freq``.
+    save_path:
+        File where the final policy weights will be written.
+    checkpoint_every:
+        Save intermediate checkpoints every this many episodes when not ``None``.
+    resume_from:
+        Optional path to a checkpoint file to start from.
     """
 
     training_cfg = cfg.get('training', {})
     num_episodes = training_cfg.get('episodes', 100)
     learning_rate = training_cfg.get('learning_rate', 1e-3)
     eval_freq = training_cfg.get('eval_freq', 10)
+    if checkpoint_every is None:
+        checkpoint_every = training_cfg.get('checkpoint_steps')
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = PursuerOnlyEnv(cfg)
     policy = PursuerPolicy(env.observation_space.shape[0]).to(device)
+    if resume_from:
+        state_dict = torch.load(resume_from, map_location=device)
+        policy.load_state_dict(state_dict)
+        print(f"Loaded checkpoint from {resume_from}")
     optimizer = optim.Adam(policy.parameters(), lr=learning_rate)
     gamma = 0.99
 
@@ -221,6 +240,11 @@ def train(cfg: dict, save_path: Optional[str] = None):
             # Periodically report progress on separate evaluation episodes
             avg_r, success = evaluate(policy, PursuerOnlyEnv(config))
             print(f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}")
+        if checkpoint_every and save_path and (episode + 1) % checkpoint_every == 0:
+            base, ext = os.path.splitext(save_path)
+            ckpt_path = f"{base}_ckpt_{episode+1}{ext}"
+            torch.save(policy.state_dict(), ckpt_path)
+            print(f"Checkpoint saved to {ckpt_path}")
 
     # Final evaluation after training
     avg_r, success = evaluate(policy, PursuerOnlyEnv(config))
@@ -244,12 +268,23 @@ if __name__ == "__main__":
     parser.add_argument("--save-path", type=str,
                         default="pursuer_policy.pt",
                         help="where to store the trained weights")
+    parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        help="save a checkpoint every N episodes",
+    )
+    parser.add_argument(
+        "--resume-from",
+        type=str,
+        help="start training from this checkpoint file",
+    )
     args = parser.parse_args()
 
     training_cfg = config.setdefault('training', {
         'episodes': 5000,
         'learning_rate': 1e-3,
         'eval_freq': 1000,
+        'checkpoint_steps': 0,
     })
     if args.episodes is not None:
         training_cfg['episodes'] = args.episodes
@@ -257,7 +292,14 @@ if __name__ == "__main__":
         training_cfg['learning_rate'] = args.lr
     if args.eval_freq is not None:
         training_cfg['eval_freq'] = args.eval_freq
+    if args.checkpoint_every is not None:
+        training_cfg['checkpoint_steps'] = args.checkpoint_every
     if args.time_step is not None:
         config['time_step'] = args.time_step
 
-    train(config, save_path=args.save_path)
+    train(
+        config,
+        save_path=args.save_path,
+        checkpoint_every=training_cfg.get('checkpoint_steps'),
+        resume_from=args.resume_from,
+    )
