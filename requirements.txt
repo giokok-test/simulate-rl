@@ -3,3 +3,4 @@ torch
 gymnasium
 matplotlib
 pyyaml
+tensorboard

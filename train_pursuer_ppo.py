@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 import gymnasium as gym
 from typing import Optional
 
@@ -190,8 +191,24 @@ def train(
     *,
     checkpoint_every: int | None = None,
     resume_from: str | None = None,
+    log_dir: str | None = None,
 ):
-    """Train the pursuer policy using PPO."""
+    """Train the pursuer policy using PPO.
+
+    Parameters
+    ----------
+    cfg:
+        Configuration dictionary with a ``training`` section.
+    save_path:
+        Path to store the final model parameters.
+    checkpoint_every:
+        Interval in episodes between checkpoints when set.
+    resume_from:
+        Optional checkpoint file to load before starting training.
+    log_dir:
+        Optional directory for TensorBoard logs. When ``None`` no logging is
+        performed.
+    """
 
     training_cfg = cfg.get('training', {})
     num_episodes = training_cfg.get('episodes', 100)
@@ -203,6 +220,7 @@ def train(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = PursuerOnlyEnv(cfg)
     model = ActorCritic(env.observation_space.shape[0]).to(device)
+    writer = SummaryWriter(log_dir=log_dir) if log_dir else None
     if resume_from:
         state_dict = torch.load(resume_from, map_location=device)
         model.load_state_dict(state_dict)
@@ -290,6 +308,9 @@ def train(
             loss.backward()
             optimizer.step()
 
+        if writer:
+            writer.add_scalar("train/loss", loss.item(), episode)
+
         print(f"Initial pursuer pos: {init_pursuer_pos}")
         print(f"Initial evader pos: {init_evader_pos}")
         print(header)
@@ -299,6 +320,19 @@ def train(
         for row in last_rows:
             print(row)
         episode_reward = sum(rewards)
+        if writer:
+            writer.add_scalar("train/episode_reward", episode_reward, episode)
+            if info:
+                writer.add_scalar(
+                    "train/min_distance",
+                    info.get("min_distance", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "train/episode_length",
+                    info.get("episode_steps", step),
+                    episode,
+                )
         if info:
             print(
                 f"Episode {episode+1}: reward={episode_reward:.2f} "
@@ -318,6 +352,9 @@ def train(
             print(
                 f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}"
             )
+            if writer:
+                writer.add_scalar("eval/avg_reward", avg_r, episode)
+                writer.add_scalar("eval/success_rate", success, episode)
         if checkpoint_every and save_path and (episode + 1) % checkpoint_every == 0:
             base, ext = os.path.splitext(save_path)
             ckpt_path = f"{base}_ckpt_{episode+1}{ext}"
@@ -326,10 +363,15 @@ def train(
 
     avg_r, success = evaluate(model, PursuerOnlyEnv(cfg))
     print(f"Final performance: avg_reward={avg_r:.2f} success={success:.2f}")
+    if writer:
+        writer.add_scalar("eval/final_avg_reward", avg_r, num_episodes)
+        writer.add_scalar("eval/final_success_rate", success, num_episodes)
 
     if save_path is not None:
         torch.save(model.state_dict(), save_path)
         print(f"Model saved to {save_path}")
+    if writer:
+        writer.close()
 
 
 if __name__ == "__main__":
@@ -349,6 +391,12 @@ if __name__ == "__main__":
         "--resume-from",
         type=str,
         help="start training from this checkpoint file",
+    )
+    parser.add_argument(
+        "--log-dir",
+        type=str,
+        default="runs/ppo",
+        help="write TensorBoard logs to this directory",
     )
     args = parser.parse_args()
 
@@ -376,4 +424,5 @@ if __name__ == "__main__":
         save_path=args.save_path,
         checkpoint_every=training_cfg.get('checkpoint_steps'),
         resume_from=args.resume_from,
+        log_dir=args.log_dir,
     )

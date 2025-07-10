@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 import gymnasium as gym
 from typing import Optional
 
@@ -180,6 +181,7 @@ def train(
     *,
     checkpoint_every: int | None = None,
     resume_from: str | None = None,
+    log_dir: str | None = None,
 ):
     """Train the pursuer policy with REINFORCE.
 
@@ -194,6 +196,9 @@ def train(
         Save intermediate checkpoints every this many episodes when not ``None``.
     resume_from:
         Optional path to a checkpoint file to start from.
+    log_dir:
+        Optional directory for TensorBoard logs. When ``None`` no logging is
+        performed.
     """
 
     training_cfg = cfg.get('training', {})
@@ -206,6 +211,7 @@ def train(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = PursuerOnlyEnv(cfg)
     policy = PursuerPolicy(env.observation_space.shape[0]).to(device)
+    writer = SummaryWriter(log_dir=log_dir) if log_dir else None
     if resume_from:
         state_dict = torch.load(resume_from, map_location=device)
         policy.load_state_dict(state_dict)
@@ -274,6 +280,20 @@ def train(
         for row in last_rows:
             print(row)
         episode_reward = sum(rewards)
+        if writer:
+            writer.add_scalar("train/episode_reward", episode_reward, episode)
+            if info:
+                writer.add_scalar(
+                    "train/min_distance",
+                    info.get("min_distance", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "train/episode_length",
+                    info.get("episode_steps", step),
+                    episode,
+                )
+            writer.add_scalar("train/loss", loss.item(), episode)
         if info:
             print(
                 f"Episode {episode+1}: reward={episode_reward:.2f} "
@@ -291,6 +311,9 @@ def train(
             # Periodically report progress on separate evaluation episodes
             avg_r, success = evaluate(policy, PursuerOnlyEnv(config))
             print(f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}")
+            if writer:
+                writer.add_scalar("eval/avg_reward", avg_r, episode)
+                writer.add_scalar("eval/success_rate", success, episode)
         if checkpoint_every and save_path and (episode + 1) % checkpoint_every == 0:
             base, ext = os.path.splitext(save_path)
             ckpt_path = f"{base}_ckpt_{episode+1}{ext}"
@@ -300,10 +323,15 @@ def train(
     # Final evaluation after training
     avg_r, success = evaluate(policy, PursuerOnlyEnv(config))
     print(f"Final performance: avg_reward={avg_r:.2f} success={success:.2f}")
+    if writer:
+        writer.add_scalar("eval/final_avg_reward", avg_r, num_episodes)
+        writer.add_scalar("eval/final_success_rate", success, num_episodes)
 
     if save_path is not None:
         torch.save(policy.state_dict(), save_path)
         print(f"Model saved to {save_path}")
+    if writer:
+        writer.close()
 
 
 if __name__ == "__main__":
@@ -329,6 +357,12 @@ if __name__ == "__main__":
         type=str,
         help="start training from this checkpoint file",
     )
+    parser.add_argument(
+        "--log-dir",
+        type=str,
+        default="runs/reinforce",
+        help="write TensorBoard logs to this directory",
+    )
     args = parser.parse_args()
 
     training_cfg = config.setdefault('training', {
@@ -353,4 +387,5 @@ if __name__ == "__main__":
         save_path=args.save_path,
         checkpoint_every=training_cfg.get('checkpoint_steps'),
         resume_from=args.resume_from,
+        log_dir=args.log_dir,
     )
