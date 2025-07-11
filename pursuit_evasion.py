@@ -460,23 +460,35 @@ class PursuitEvasionEnv(gym.Env):
         return {'pursuer': obs_p.astype(np.float32), 'evader': obs_e.astype(np.float32)}
 
 
-def _make_mlp(input_dim: int, output_dim: int) -> nn.Sequential:
-    """Utility to build a simple two-layer MLP."""
+def _make_mlp(
+    input_dim: int,
+    output_dim: int,
+    hidden_size: int = 64,
+    activation: str = "relu",
+) -> nn.Sequential:
+    """Utility to build a simple two-layer MLP with configurable width."""
+
+    acts = {
+        "relu": nn.ReLU,
+        "tanh": nn.Tanh,
+        "leaky_relu": nn.LeakyReLU,
+    }
+    act_cls = acts.get(activation, nn.ReLU)
     return nn.Sequential(
-        nn.Linear(input_dim, 64),
-        nn.ReLU(),
-        nn.Linear(64, 64),
-        nn.ReLU(),
-        nn.Linear(64, output_dim),
+        nn.Linear(input_dim, hidden_size),
+        act_cls(),
+        nn.Linear(hidden_size, hidden_size),
+        act_cls(),
+        nn.Linear(hidden_size, output_dim),
     )
 
 
 class EvaderPolicy(nn.Module):
     """Simple MLP producing evader actions."""
 
-    def __init__(self, obs_dim: int):
+    def __init__(self, obs_dim: int, hidden_size: int = 64, activation: str = "relu"):
         super().__init__()
-        self.net = _make_mlp(obs_dim, 3)
+        self.net = _make_mlp(obs_dim, 3, hidden_size, activation)
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         return self.net(obs)
@@ -485,9 +497,9 @@ class EvaderPolicy(nn.Module):
 class PursuerPolicy(nn.Module):
     """Adversary network producing pursuer actions."""
 
-    def __init__(self, obs_dim: int):
+    def __init__(self, obs_dim: int, hidden_size: int = 64, activation: str = "relu"):
         super().__init__()
-        self.net = _make_mlp(obs_dim, 3)
+        self.net = _make_mlp(obs_dim, 3, hidden_size, activation)
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         return self.net(obs)
