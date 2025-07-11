@@ -152,9 +152,11 @@ class PursuitEvasionEnv(gym.Env):
         })
         self.action_space = gym.spaces.Dict({
             # actions: [acceleration magnitude, azimuth, pitch]
+            # Acceleration is a non-negative scalar with direction determined by
+            # the commanded yaw and pitch angles.
             'pursuer': gym.spaces.Box(
                 low=np.array([
-                    -cfg['pursuer']['max_acceleration'],
+                    0.0,
                     -np.pi,
                     -cfg['pursuer']['stall_angle'],
                 ], dtype=np.float32),
@@ -319,7 +321,9 @@ class PursuitEvasionEnv(gym.Env):
             dir_vec = self.pursuer_force_dir
             gravity = np.zeros(3, dtype=np.float32)
 
-        mag = float(np.clip(action[0], -max_acc, max_acc))
+        # Acceleration magnitude is a non-negative scalar. The commanded yaw and
+        # pitch angles define the direction of the applied force.
+        mag = float(np.clip(action[0], 0.0, max_acc))
         theta = float(action[1])
         phi = float(np.clip(action[2], -stall, stall))
         target_dir = np.array([
@@ -360,11 +364,21 @@ class PursuitEvasionEnv(gym.Env):
         drag = -drag_c * vel
         acc_total = acc_cmd + drag + gravity
 
-        # Simple Euler integration of velocity and position
-        vel[:] = vel + acc_total * self.dt
-        speed = np.linalg.norm(vel)
+        # Integrate velocity while preventing a reversal of direction. When the
+        # commanded acceleration would overshoot and invert the velocity vector
+        # along its original direction, clamp the component in that direction to
+        # zero instead of letting the agent move backwards.
+        vel_dir = vel / (np.linalg.norm(vel) + 1e-8)
+        vel_new = vel + acc_total * self.dt
+        if np.dot(vel_new, vel_dir) < 0.0:
+            # remove the component opposing the previous velocity
+            perp = vel_new - np.dot(vel_new, vel_dir) * vel_dir
+            vel_new = perp
+
+        speed = np.linalg.norm(vel_new)
         if speed > top_speed:
-            vel[:] = vel / speed * top_speed
+            vel_new = vel_new / speed * top_speed
+        vel[:] = vel_new
         pos[:] = pos + vel * self.dt
 
     def _angle_between(self, a: np.ndarray, b: np.ndarray) -> float:
