@@ -64,6 +64,8 @@ tensorboard --logdir runs
 ```
 
 This will show episode rewards, evaluation results and losses during training.
+When a log directory is set, periodic checkpoints created with
+``--checkpoint-every`` are stored under ``<log-dir>/checkpoints``.
 
 ### New training options
 
@@ -100,6 +102,7 @@ The command line options are the same as for ``train_pursuer.py`` and the
 trained weights are written to ``pursuer_ppo.pt`` unless ``--save-path`` is
 specified. Both training scripts also support ``--checkpoint-every`` to save
 periodic checkpoints and ``--resume-from`` to continue from a saved model.
+If ``--log-dir`` is supplied these checkpoints are placed in ``<log-dir>/checkpoints``.
 The PPO trainer additionally accepts ``--num-envs`` to run several
 environment instances in parallel which can significantly speed up data
 collection on multi-core machines.
