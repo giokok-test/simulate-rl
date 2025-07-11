@@ -233,7 +233,7 @@ def train(
         state_dict = torch.load(resume_from, map_location=device)
         model.load_state_dict(state_dict)
         print(f"Loaded checkpoint from {resume_from}")
-    optimizer = optim.Adam(
+    optimizer = optim.AdamW(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay
     )
     scheduler = (
