@@ -104,6 +104,19 @@ The PPO trainer additionally accepts ``--num-envs`` to run several
 environment instances in parallel which can significantly speed up data
 collection on multi-core machines.
 
+### Curriculum training
+
+Both training scripts optionally support gradually increasing the starting
+difficulty of each episode. The `training.curriculum` section in
+`config.yaml` contains `start` and `end` dictionaries with values that are
+interpolated over the course of training. Any numeric field under these
+dictionaries will be linearly scaled from the `start` value to the `end`
+value as episodes progress. For example, the default configuration narrows
+the pursuer's `yaw_range` and initial `force_target_radius` to begin the
+agent immediately behind the evader before expanding to the full search
+area. The curriculum makes it possible to smoothly transition from simple
+encounters to more challenging ones.
+
 ## Additional scripts
 
 - `pursuit_evasion.py` contains the environment implementation along with a
@@ -150,13 +163,14 @@ the target (within ±15° of the exact bearing).
 The pursuer's starting position is sampled inside a configurable volume.
 `pursuer_start.cone_half_angle` sets the outer limit of the spawn cone
 below the evader while `pursuer_start.inner_cone_half_angle` specifies an
-inner cutoff to avoid very steep spawn angles.  The `sections` dictionary
-divides the horizontal plane around the evader into four 90° quadrants
-(`front`, `right`, `back`, `left`) relative to the evader's initial
-heading.  Each section can be enabled or disabled to further restrict the
-spawn volume.  Combined with the `min_range` and `max_range` distances
-these options define where the pursuer may appear at the beginning of an
-episode.
+inner cutoff to avoid very steep spawn angles.  Horizontal placement can be
+controlled either by specifying explicit `sections` (front, right, back and
+left quadrants) **or** with `pursuer_start.yaw_range`.  The yaw range is
+measured relative to directly behind the evader (0&nbsp;rad points toward the
+pursuer approaching from behind).  When `yaw_range` is present it overrides
+the section based spawning.  Combined with the `min_range` and
+`max_range` distances these options define where the pursuer may appear at
+the beginning of an episode.
 Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
 at runtime, so changes take effect the next time you run the scripts.
 The reward shaping parameters `shaping_weight`, `closer_weight` and

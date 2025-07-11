@@ -116,15 +116,19 @@ def main():
     heading[2] = 0.0
     base_yaw = np.arctan2(heading[1], heading[0])
     deg45 = np.deg2rad(45.0)
-    ranges = []
-    if sections.get("front", True):
-        ranges.append((base_yaw - deg45, base_yaw + deg45))
-    if sections.get("right", True):
-        ranges.append((base_yaw - np.pi/2 - deg45, base_yaw - np.pi/2 + deg45))
-    if sections.get("back", True):
-        ranges.append((base_yaw + np.pi - deg45, base_yaw + np.pi + deg45))
-    if sections.get("left", True):
-        ranges.append((base_yaw + deg45, base_yaw + np.pi/2 + deg45))
+    if "yaw_range" in p_cfg:
+        yaw_min, yaw_max = p_cfg["yaw_range"]
+        ranges = [(base_yaw + np.pi + yaw_min, base_yaw + np.pi + yaw_max)]
+    else:
+        ranges = []
+        if sections.get("front", True):
+            ranges.append((base_yaw - deg45, base_yaw + deg45))
+        if sections.get("right", True):
+            ranges.append((base_yaw - np.pi/2 - deg45, base_yaw - np.pi/2 + deg45))
+        if sections.get("back", True):
+            ranges.append((base_yaw + np.pi - deg45, base_yaw + np.pi + deg45))
+        if sections.get("left", True):
+            ranges.append((base_yaw + deg45, base_yaw + np.pi/2 + deg45))
 
     draw_spawn_volume(
         ax,

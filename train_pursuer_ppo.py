@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import copy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -44,6 +45,7 @@ from pursuit_evasion import (
     PursuerPolicy,
     _make_mlp,
     load_config,
+    apply_curriculum,
 )
 
 # Load configuration and fix the evader policy
@@ -226,6 +228,9 @@ def train(
     eval_freq = training_cfg.get('eval_freq', 10)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
+    curriculum_cfg = training_cfg.get('curriculum')
+    start_cur = curriculum_cfg.get('start') if curriculum_cfg else None
+    end_cur = curriculum_cfg.get('end') if curriculum_cfg else None
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if num_envs > 1:
@@ -270,6 +275,13 @@ def train(
     efficiency_logged = False
 
     for episode in range(num_episodes):
+        progress = episode / max(num_episodes - 1, 1)
+        if start_cur and end_cur:
+            if num_envs == 1:
+                apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
+            else:
+                for e in env.envs:
+                    apply_curriculum(e.env.cfg, start_cur, end_cur, progress)
         if num_envs == 1:
             obs, _ = env.reset()
             init_pursuer_pos = env.env.pursuer_pos.copy()
@@ -438,7 +450,10 @@ def train(
                 writer.add_scalar("train/episode_reward", episode_reward, episode)
 
         if (episode + 1) % eval_freq == 0:
-            avg_r, success = evaluate(model, PursuerOnlyEnv(cfg))
+            eval_cfg = copy.deepcopy(cfg)
+            if start_cur and end_cur:
+                apply_curriculum(eval_cfg, start_cur, end_cur, progress)
+            avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg))
             print(
                 f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}"
             )
@@ -458,7 +473,10 @@ def train(
             torch.save(model.state_dict(), ckpt_path)
             print(f"Checkpoint saved to {ckpt_path}")
 
-    avg_r, success = evaluate(model, PursuerOnlyEnv(cfg))
+    eval_cfg = copy.deepcopy(cfg)
+    if start_cur and end_cur:
+        apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
+    avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg))
     print(f"Final performance: avg_reward={avg_r:.2f} success={success:.2f}")
     if writer:
         writer.add_scalar("eval/final_avg_reward", avg_r, num_episodes)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import copy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -40,7 +41,12 @@ def _format_row(step: int, env: PursuitEvasionEnv) -> str:
         f"[{pe_u[0]:6.2f} {pe_u[1]:6.2f} {pe_u[2]:6.2f}]"
     )
 
-from pursuit_evasion import PursuitEvasionEnv, PursuerPolicy, load_config
+from pursuit_evasion import (
+    PursuitEvasionEnv,
+    PursuerPolicy,
+    load_config,
+    apply_curriculum,
+)
 
 # Load configuration and set the evader to be unaware
 config = load_config()
@@ -213,6 +219,9 @@ def train(
     eval_freq = training_cfg.get('eval_freq', 10)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
+    curriculum_cfg = training_cfg.get('curriculum')
+    start_cur = curriculum_cfg.get('start') if curriculum_cfg else None
+    end_cur = curriculum_cfg.get('end') if curriculum_cfg else None
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = PursuerOnlyEnv(cfg)
@@ -243,6 +252,9 @@ def train(
 
     efficiency_logged = False
     for episode in range(num_episodes):
+        progress = episode / max(num_episodes - 1, 1)
+        if start_cur and end_cur:
+            apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
         # Collect one episode of experience
         obs, _ = env.reset()
         init_pursuer_pos = env.env.pursuer_pos.copy()
@@ -327,7 +339,10 @@ def train(
                 print(row)
         if (episode + 1) % eval_freq == 0:
             # Periodically report progress on separate evaluation episodes
-            avg_r, success = evaluate(policy, PursuerOnlyEnv(config))
+            eval_cfg = copy.deepcopy(cfg)
+            if start_cur and end_cur:
+                apply_curriculum(eval_cfg, start_cur, end_cur, progress)
+            avg_r, success = evaluate(policy, PursuerOnlyEnv(eval_cfg))
             print(f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}")
             if writer:
                 writer.add_scalar("eval/avg_reward", avg_r, episode)
@@ -346,7 +361,10 @@ def train(
             print(f"Checkpoint saved to {ckpt_path}")
 
     # Final evaluation after training
-    avg_r, success = evaluate(policy, PursuerOnlyEnv(config))
+    eval_cfg = copy.deepcopy(cfg)
+    if start_cur and end_cur:
+        apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
+    avg_r, success = evaluate(policy, PursuerOnlyEnv(eval_cfg))
     print(f"Final performance: avg_reward={avg_r:.2f} success={success:.2f}")
     if writer:
         writer.add_scalar("eval/final_avg_reward", avg_r, num_episodes)
