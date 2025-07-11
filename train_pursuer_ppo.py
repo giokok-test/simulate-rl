@@ -192,6 +192,7 @@ def train(
     checkpoint_every: int | None = None,
     resume_from: str | None = None,
     log_dir: str | None = None,
+    num_envs: int = 1,
 ):
     """Train the pursuer policy using PPO.
 
@@ -208,6 +209,9 @@ def train(
     log_dir:
         Optional directory for TensorBoard logs. When ``None`` no logging is
         performed.
+    num_envs:
+        Number of parallel environments to run. Values greater than one use a
+        vectorised environment for faster data collection.
     """
 
     training_cfg = cfg.get('training', {})
@@ -224,9 +228,18 @@ def train(
         checkpoint_every = training_cfg.get('checkpoint_steps')
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    env = PursuerOnlyEnv(cfg)
+    if num_envs > 1:
+        def _make() -> PursuerOnlyEnv:
+            return PursuerOnlyEnv(cfg)
+
+        env = gym.vector.AsyncVectorEnv([_make for _ in range(num_envs)])
+        obs_space = env.single_observation_space
+    else:
+        env = PursuerOnlyEnv(cfg)
+        obs_space = env.observation_space
+
     model = ActorCritic(
-        env.observation_space.shape[0], hidden_size=hidden_size, activation=activation
+        obs_space.shape[0], hidden_size=hidden_size, activation=activation
     ).to(device)
     writer = SummaryWriter(log_dir=log_dir) if log_dir else None
     if resume_from:
@@ -257,57 +270,110 @@ def train(
     efficiency_logged = False
 
     for episode in range(num_episodes):
-        obs, _ = env.reset()
-        init_pursuer_pos = env.env.pursuer_pos.copy()
-        init_evader_pos = env.env.evader_pos.copy()
-        done = False
-        log_probs = []
-        values = []
-        rewards = []
-        obs_list = []
-        actions = []
-        info = {}
-        rows = []
-        start_d = env.start_distance
-        target = np.asarray(env.env.cfg["target_position"], dtype=float)
-        first_rows: list[str] = []
-        last_rows: list[str] = []
-        step = 0
-        while not done:
-            obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
-            mean, value = model(obs_t)
-            dist = torch.distributions.Normal(mean, torch.ones_like(mean))
-            action = dist.sample()
-            log_prob = dist.log_prob(action).sum()
-            next_obs, r, done, _, info = env.step(action.cpu().numpy())
-            rows.append(_format_row(len(rows), env.env))
-            log_probs.append(log_prob.detach())
-            values.append(value.detach())
-            rewards.append(r)
-            obs_list.append(obs_t)
-            actions.append(action)
-            row = _format_step(env, step, target)
-            if len(first_rows) < 3:
-                first_rows.append(row)
-            if len(last_rows) >= 3:
-                last_rows.pop(0)
-            last_rows.append(row)
-            obs = next_obs
-            step += 1
+        if num_envs == 1:
+            obs, _ = env.reset()
+            init_pursuer_pos = env.env.pursuer_pos.copy()
+            init_evader_pos = env.env.evader_pos.copy()
+            done = False
+            log_probs = []
+            values = []
+            rewards = []
+            obs_list = []
+            actions = []
+            info = {}
+            rows = []
+            start_d = env.start_distance
+            target = np.asarray(env.env.cfg["target_position"], dtype=float)
+            first_rows: list[str] = []
+            last_rows: list[str] = []
+            step = 0
+            while not done:
+                obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
+                mean, value = model(obs_t)
+                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                action = dist.sample()
+                log_prob = dist.log_prob(action).sum()
+                next_obs, r, done, _, info = env.step(action.cpu().numpy())
+                rows.append(_format_row(len(rows), env.env))
+                log_probs.append(log_prob.detach())
+                values.append(value.detach())
+                rewards.append(r)
+                obs_list.append(obs_t)
+                actions.append(action)
+                row = _format_step(env, step, target)
+                if len(first_rows) < 3:
+                    first_rows.append(row)
+                if len(last_rows) >= 3:
+                    last_rows.pop(0)
+                last_rows.append(row)
+                obs = next_obs
+                step += 1
 
-        # compute returns and advantages
-        returns = []
-        G = 0.0
-        for r in reversed(rewards):
-            G = r + gamma * G
-            returns.insert(0, G)
-        returns = torch.tensor(returns, dtype=torch.float32, device=device)
-        values_t = torch.stack(values)
-        advantages = returns - values_t
+            returns = []
+            G = 0.0
+            for r in reversed(rewards):
+                G = r + gamma * G
+                returns.insert(0, G)
+            returns = torch.tensor(returns, dtype=torch.float32, device=device)
+            values_t = torch.stack(values)
+            advantages = returns - values_t
 
-        obs_batch = torch.stack(obs_list)
-        action_batch = torch.stack(actions)
-        old_log_probs = torch.stack(log_probs)
+            obs_batch = torch.stack(obs_list)
+            action_batch = torch.stack(actions)
+            old_log_probs = torch.stack(log_probs)
+
+        else:
+            obs, _ = env.reset()
+            done = np.zeros(num_envs, dtype=bool)
+            log_probs = [[] for _ in range(num_envs)]
+            values = [[] for _ in range(num_envs)]
+            rewards = [[] for _ in range(num_envs)]
+            obs_list = [[] for _ in range(num_envs)]
+            actions = [[] for _ in range(num_envs)]
+            infos = [None for _ in range(num_envs)]
+            step = 0
+            while not np.all(done):
+                obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
+                mean, value = model(obs_t)
+                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                action = dist.sample()
+                log_prob = dist.log_prob(action).sum(dim=1)
+                next_obs, r, d, _, info = env.step(action.cpu().numpy())
+                for i in range(num_envs):
+                    if not done[i]:
+                        log_probs[i].append(log_prob[i].detach())
+                        values[i].append(value[i].detach())
+                        rewards[i].append(r[i])
+                        obs_list[i].append(obs_t[i])
+                        actions[i].append(action[i])
+                    if d[i] and infos[i] is None:
+                        infos[i] = info[i]
+                done = np.logical_or(done, d)
+                obs = next_obs
+                step += 1
+
+            ret_list = []
+            val_list = []
+            log_list = []
+            obs_stack = []
+            action_stack = []
+            for i in range(num_envs):
+                G = 0.0
+                returns_i = []
+                for rr in reversed(rewards[i]):
+                    G = rr + gamma * G
+                    returns_i.insert(0, G)
+                ret_list.append(torch.tensor(returns_i, dtype=torch.float32, device=device))
+                val_list.append(torch.stack(values[i]))
+                log_list.append(torch.stack(log_probs[i]))
+                obs_stack.append(torch.stack(obs_list[i]))
+                action_stack.append(torch.stack(actions[i]))
+            returns = torch.cat(ret_list)
+            values_t = torch.cat(val_list)
+            advantages = returns - values_t
+            obs_batch = torch.cat(obs_stack)
+            action_batch = torch.cat(action_stack)
+            old_log_probs = torch.cat(log_list)
 
         for _ in range(ppo_epochs):
             mean, value = model(obs_batch)
@@ -330,41 +396,46 @@ def train(
         if writer:
             writer.add_scalar("train/loss", loss.item(), episode)
 
-        print(f"Initial pursuer pos: {init_pursuer_pos}")
-        print(f"Initial evader pos: {init_evader_pos}")
-        print(header)
-        print("-" * len(header))
-        for row in first_rows:
-            print(row)
-        for row in last_rows:
-            print(row)
-        episode_reward = sum(rewards)
-        if writer:
-            writer.add_scalar("train/episode_reward", episode_reward, episode)
+        if num_envs == 1:
+            print(f"Initial pursuer pos: {init_pursuer_pos}")
+            print(f"Initial evader pos: {init_evader_pos}")
+            print(header)
+            print("-" * len(header))
+            for row in first_rows:
+                print(row)
+            for row in last_rows:
+                print(row)
+            episode_reward = sum(rewards)
+            if writer:
+                writer.add_scalar("train/episode_reward", episode_reward, episode)
+                if info:
+                    writer.add_scalar(
+                        "train/min_distance",
+                        info.get("min_distance", float("nan")),
+                        episode,
+                    )
+                    writer.add_scalar(
+                        "train/episode_length",
+                        info.get("episode_steps", step),
+                        episode,
+                    )
             if info:
-                writer.add_scalar(
-                    "train/min_distance",
-                    info.get("min_distance", float("nan")),
-                    episode,
+                print(
+                    f"Episode {episode+1}: reward={episode_reward:.2f} "
+                    f"outcome={info.get('outcome', 'timeout')} start={start_d:.2f} "
+                    f"min={info.get('min_distance', float('nan')):.2f}"
                 )
-                writer.add_scalar(
-                    "train/episode_length",
-                    info.get("episode_steps", step),
-                    episode,
-                )
-        if info:
-            print(
-                f"Episode {episode+1}: reward={episode_reward:.2f} "
-                f"outcome={info.get('outcome', 'timeout')} start={start_d:.2f} "
-                f"min={info.get('min_distance', float('nan')):.2f}"
-            )
-            print(TABLE_HEADER)
-            for row in rows[:3]:
-                print(row)
-            if len(rows) > 6:
-                print("...")
-            for row in rows[-3:]:
-                print(row)
+                print(TABLE_HEADER)
+                for row in rows[:3]:
+                    print(row)
+                if len(rows) > 6:
+                    print("...")
+                for row in rows[-3:]:
+                    print(row)
+        else:
+            episode_reward = sum(sum(r) for r in rewards) / num_envs
+            if writer:
+                writer.add_scalar("train/episode_reward", episode_reward, episode)
 
         if (episode + 1) % eval_freq == 0:
             avg_r, success = evaluate(model, PursuerOnlyEnv(cfg))
@@ -455,6 +526,12 @@ if __name__ == "__main__":
         default="runs/ppo",
         help="write TensorBoard logs to this directory",
     )
+    parser.add_argument(
+        "--num-envs",
+        type=int,
+        default=1,
+        help="number of parallel environments",
+    )
     args = parser.parse_args()
 
     training_cfg = config.setdefault(
@@ -500,4 +577,5 @@ if __name__ == "__main__":
         checkpoint_every=training_cfg.get('checkpoint_steps'),
         resume_from=args.resume_from,
         log_dir=args.log_dir,
+        num_envs=args.num_envs,
     )

@@ -100,6 +100,9 @@ The command line options are the same as for ``train_pursuer.py`` and the
 trained weights are written to ``pursuer_ppo.pt`` unless ``--save-path`` is
 specified. Both training scripts also support ``--checkpoint-every`` to save
 periodic checkpoints and ``--resume-from`` to continue from a saved model.
+The PPO trainer additionally accepts ``--num-envs`` to run several
+environment instances in parallel which can significantly speed up data
+collection on multi-core machines.
 
 ## Additional scripts
 
