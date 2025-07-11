@@ -141,10 +141,10 @@ class PursuerOnlyEnv(gym.Env):
 class ActorCritic(nn.Module):
     """Small actor-critic network."""
 
-    def __init__(self, obs_dim: int):
+    def __init__(self, obs_dim: int, hidden_size: int = 64, activation: str = "relu"):
         super().__init__()
-        self.policy_net = _make_mlp(obs_dim, 3)
-        self.value_net = _make_mlp(obs_dim, 1)
+        self.policy_net = _make_mlp(obs_dim, 3, hidden_size, activation)
+        self.value_net = _make_mlp(obs_dim, 1, hidden_size, activation)
 
     def forward(self, obs: torch.Tensor):
         mean = self.policy_net(obs)
@@ -213,19 +213,34 @@ def train(
     training_cfg = cfg.get('training', {})
     num_episodes = training_cfg.get('episodes', 100)
     learning_rate = training_cfg.get('learning_rate', 1e-3)
+    weight_decay = training_cfg.get('weight_decay', 0.0)
+    lr_step_size = training_cfg.get('lr_step_size', 0)
+    lr_gamma = training_cfg.get('lr_gamma', 0.95)
+    hidden_size = training_cfg.get('hidden_size', 64)
+    activation = training_cfg.get('activation', 'relu')
+    reward_threshold = training_cfg.get('reward_threshold', 0.0)
     eval_freq = training_cfg.get('eval_freq', 10)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = PursuerOnlyEnv(cfg)
-    model = ActorCritic(env.observation_space.shape[0]).to(device)
+    model = ActorCritic(
+        env.observation_space.shape[0], hidden_size=hidden_size, activation=activation
+    ).to(device)
     writer = SummaryWriter(log_dir=log_dir) if log_dir else None
     if resume_from:
         state_dict = torch.load(resume_from, map_location=device)
         model.load_state_dict(state_dict)
         print(f"Loaded checkpoint from {resume_from}")
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(
+        model.parameters(), lr=learning_rate, weight_decay=weight_decay
+    )
+    scheduler = (
+        optim.lr_scheduler.StepLR(optimizer, step_size=lr_step_size, gamma=lr_gamma)
+        if lr_step_size and lr_step_size > 0
+        else None
+    )
 
     gamma = 0.99
     clip_ratio = 0.2
@@ -238,6 +253,8 @@ def train(
         f"{'evader vel [m/s]':>26} | {'p dir':>18} | {'e dir':>18} | "
         f"{'p→e dir':>18}"
     )
+
+    efficiency_logged = False
 
     for episode in range(num_episodes):
         obs, _ = env.reset()
@@ -307,6 +324,8 @@ def train(
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+        if scheduler:
+            scheduler.step()
 
         if writer:
             writer.add_scalar("train/loss", loss.item(), episode)
@@ -355,6 +374,13 @@ def train(
             if writer:
                 writer.add_scalar("eval/avg_reward", avg_r, episode)
                 writer.add_scalar("eval/success_rate", success, episode)
+                if (
+                    reward_threshold > 0
+                    and not efficiency_logged
+                    and avg_r >= reward_threshold
+                ):
+                    writer.add_scalar("sweep/episodes_to_reward", episode + 1, 0)
+                    efficiency_logged = True
         if checkpoint_every and save_path and (episode + 1) % checkpoint_every == 0:
             base, ext = os.path.splitext(save_path)
             ckpt_path = f"{base}_ckpt_{episode+1}{ext}"
@@ -378,6 +404,37 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the pursuer policy using PPO")
     parser.add_argument("--episodes", type=int, help="number of training episodes")
     parser.add_argument("--lr", type=float, help="optimizer learning rate")
+    parser.add_argument(
+        "--weight-decay",
+        type=float,
+        help="L2 weight decay for the optimizer",
+    )
+    parser.add_argument(
+        "--lr-step-size",
+        type=int,
+        help="StepLR schedule interval (0 to disable)",
+    )
+    parser.add_argument(
+        "--lr-gamma",
+        type=float,
+        help="StepLR decay factor",
+    )
+    parser.add_argument(
+        "--hidden-size",
+        type=int,
+        help="width of the MLP hidden layers",
+    )
+    parser.add_argument(
+        "--activation",
+        type=str,
+        choices=["relu", "tanh", "leaky_relu"],
+        help="activation function",
+    )
+    parser.add_argument(
+        "--reward-threshold",
+        type=float,
+        help="log episodes to reach this avg reward",
+    )
     parser.add_argument("--eval-freq", type=int, help="how often to run evaluation")
     parser.add_argument("--time-step", type=float, help="simulation time step override")
     parser.add_argument("--save-path", type=str, default="pursuer_ppo.pt",
@@ -404,6 +461,12 @@ if __name__ == "__main__":
         'training', {
             'episodes': 5000,
             'learning_rate': 1e-3,
+            'weight_decay': 0.0,
+            'lr_step_size': 0,
+            'lr_gamma': 0.95,
+            'hidden_size': 64,
+            'activation': 'relu',
+            'reward_threshold': 0.0,
             'eval_freq': 1000,
             'checkpoint_steps': 0,
         },
@@ -412,6 +475,18 @@ if __name__ == "__main__":
         training_cfg['episodes'] = args.episodes
     if args.lr is not None:
         training_cfg['learning_rate'] = args.lr
+    if args.weight_decay is not None:
+        training_cfg['weight_decay'] = args.weight_decay
+    if args.lr_step_size is not None:
+        training_cfg['lr_step_size'] = args.lr_step_size
+    if args.lr_gamma is not None:
+        training_cfg['lr_gamma'] = args.lr_gamma
+    if args.hidden_size is not None:
+        training_cfg['hidden_size'] = args.hidden_size
+    if args.activation is not None:
+        training_cfg['activation'] = args.activation
+    if args.reward_threshold is not None:
+        training_cfg['reward_threshold'] = args.reward_threshold
     if args.eval_freq is not None:
         training_cfg['eval_freq'] = args.eval_freq
     if args.checkpoint_every is not None:

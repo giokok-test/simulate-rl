@@ -97,6 +97,18 @@ training:
   episodes: 5000
   # Optimiser learning rate
   learning_rate: 0.001
+  # L2 weight decay applied by the optimiser
+  weight_decay: 0.0
+  # StepLR schedule - set step size to 0 to disable
+  lr_step_size: 0
+  # Multiplicative factor of learning rate decay
+  lr_gamma: 0.95
+  # Width of hidden layers in the policy networks
+  hidden_size: 64
+  # Activation function: relu | tanh | leaky_relu
+  activation: relu
+  # Reward threshold for sample efficiency metric
+  reward_threshold: 0.0
   # Run evaluation episodes every this many training episodes
   eval_freq: 1000
   # Save a checkpoint every this many episodes. Set to 0 to disable.
