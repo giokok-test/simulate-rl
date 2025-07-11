@@ -453,8 +453,14 @@ def train(
                     writer.add_scalar("sweep/episodes_to_reward", episode + 1, 0)
                     efficiency_logged = True
         if checkpoint_every and save_path and (episode + 1) % checkpoint_every == 0:
-            base, ext = os.path.splitext(save_path)
-            ckpt_path = f"{base}_ckpt_{episode+1}{ext}"
+            base_name, ext = os.path.splitext(os.path.basename(save_path))
+            ckpt_file = f"{base_name}_ckpt_{episode+1}{ext}"
+            if log_dir:
+                ckpt_dir = os.path.join(log_dir, "checkpoints")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                ckpt_path = os.path.join(ckpt_dir, ckpt_file)
+            else:
+                ckpt_path = os.path.join(os.path.dirname(save_path), ckpt_file)
             torch.save(model.state_dict(), ckpt_path)
             print(f"Checkpoint saved to {ckpt_path}")
 
