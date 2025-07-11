@@ -65,6 +65,28 @@ tensorboard --logdir runs
 
 This will show episode rewards, evaluation results and losses during training.
 
+### New training options
+
+Both training scripts now support additional parameters for
+weight decay, learning rate scheduling and model size. These can be set via the
+`training` section in `config.yaml` or from the command line:
+
+```bash
+python train_pursuer.py --weight-decay 1e-4 --lr-step-size 500 --lr-gamma 0.9 \
+    --hidden-size 128 --activation tanh
+```
+
+The `hidden-size` and `activation` options control the width and activation
+function of the two-layer MLP used by the policies (available activations are
+`relu`, `tanh` and `leaky_relu`).
+
+### Hyperparameter sweeps
+
+The repository includes a small `sweep.py` utility which iterates over a grid of
+hyperparameters and logs each run to its own TensorBoard directory. The sweep
+script also records the number of episodes required to reach a configurable
+average reward threshold via the `sweep/episodes_to_reward` metric.
+
 ### PPO variant
 
 For a more stable actor--critic approach, run the ``train_pursuer_ppo.py``
