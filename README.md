@@ -133,7 +133,7 @@ which is useful for quickly checking that the environment works.
 The environment stores several statistics for each episode. When an episode
 finishes the ``info`` dictionary returned from ``env.step`` contains the
 closest pursuer--evader distance, number of steps and outcome (capture,
-evader reaching the target, separation exceeding twice the starting distance or timeout). The evaluation helpers in the training
+evader reaching the target, separation exceeding a multiple of the starting distance (controlled by `separation_cutoff_factor` in `config.yaml`) or timeout). The evaluation helpers in the training
 scripts print the average minimum distance and episode length during
 periodic evaluations.
 
@@ -161,7 +161,9 @@ Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
 at runtime, so changes take effect the next time you run the scripts.
 The reward shaping parameters `shaping_weight`, `closer_weight` and
 `angle_weight` can be adjusted here as well to encourage desired
-behaviour.
+behaviour. The `separation_cutoff_factor` option defines a multiplier of
+the initial pursuer--evader distance that ends the episode when the
+agents drift farther apart than this threshold.
 
 The `evader.awareness_mode` option defines how much information the
 evader receives about the pursuer:
