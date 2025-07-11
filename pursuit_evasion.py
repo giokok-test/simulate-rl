@@ -551,8 +551,8 @@ def train_autogan(policy_e: EvaderPolicy, policy_p: PursuerPolicy, env: PursuitE
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     policy_e.to(device)
     policy_p.to(device)
-    opt_e = optim.Adam(policy_e.parameters(), lr=1e-3)
-    opt_p = optim.Adam(policy_p.parameters(), lr=1e-3)
+    opt_e = optim.AdamW(policy_e.parameters(), lr=1e-3)
+    opt_p = optim.AdamW(policy_p.parameters(), lr=1e-3)
     gamma = 0.99
 
     for episode in range(iterations):
