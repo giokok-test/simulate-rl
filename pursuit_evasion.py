@@ -123,6 +123,8 @@ class PursuitEvasionEnv(gym.Env):
         # and the line of sight to the evader from one step to the next.
         self.angle_weight = self.cfg.get('angle_weight', 0.0)
         self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
+        # maximum allowed separation before the episode ends
+        self.cutoff_factor = self.cfg.get('separation_cutoff_factor', 2.0)
         # Convert stall angles provided in degrees to radians once
         self.cfg['evader']['stall_angle'] = np.deg2rad(
             self.cfg['evader']['stall_angle']
@@ -294,7 +296,7 @@ class PursuitEvasionEnv(gym.Env):
                 info['outcome'] = 'evader_ground'
             elif self.pursuer_pos[2] < 0.0:
                 info['outcome'] = 'pursuer_ground'
-            elif dist_pe >= 2 * self.start_pe_dist:
+            elif dist_pe >= self.cutoff_factor * self.start_pe_dist:
                 info['outcome'] = 'separation_exceeded'
 
         self.cur_step += 1
@@ -419,7 +421,7 @@ class PursuitEvasionEnv(gym.Env):
 
         if dist <= self.cfg['capture_radius']:
             return True, -1.0, 1.0
-        if dist >= 2 * self.start_pe_dist:
+        if dist >= self.cutoff_factor * self.start_pe_dist:
             return True, 0.0, 0.0
 
         # episode ends if either agent goes below ground level
