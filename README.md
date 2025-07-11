@@ -100,6 +100,9 @@ The command line options are the same as for ``train_pursuer.py`` and the
 trained weights are written to ``pursuer_ppo.pt`` unless ``--save-path`` is
 specified. Both training scripts also support ``--checkpoint-every`` to save
 periodic checkpoints and ``--resume-from`` to continue from a saved model.
+The PPO trainer additionally accepts ``--num-envs`` to run several
+environment instances in parallel which can significantly speed up data
+collection on multi-core machines.
 
 ## Additional scripts
 
@@ -175,8 +178,9 @@ degrees but converted to radians when the environment loads. Actions
 specify yaw and **pitch** where pitch is measured relative to the horizontal
 x–y plane (positive values command an upward climb). Both agents clamp
 their pitch commands to ``[-stall_angle, +stall_angle]``. The first action
-component controls acceleration. The pursuer may command negative values
-down to ``-max_acceleration`` to brake. The
+component controls the **magnitude** of the acceleration while the yaw and
+pitch angles define its direction. Acceleration can slow the agent down but is
+clamped so that it never reverses the current velocity. The
 ``evader.trajectory`` option selects a preset flight profile. When set to
 ``"dive"`` the evader keeps a non-negative pitch until the line of sight to the
 target drops below ``evader.dive_angle`` (specified in degrees). Once past this
