@@ -31,7 +31,7 @@ pursuer:
   mass: 100.0
   # Maximum acceleration magnitude [m/s^2]
   max_acceleration: 30.0
-  # Acceleration can be negative allowing the pursuer to brake
+  # Commanded acceleration magnitude [non-negative]
   # Upper speed limit [m/s]
   top_speed: 150.0
   # Dimensionless coefficient modelling drag
