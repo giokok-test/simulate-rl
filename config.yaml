@@ -74,12 +74,9 @@ pursuer_start:
   cone_half_angle: 1.5
   # Minimum half angle of the pursuer spawn cone [rad]
   inner_cone_half_angle: 1.3
-  # Enable or disable spawn quadrants relative to the evader heading
-  sections:
-    front: false
-    left: true
-    right: true
-    back: false
+  # Horizontal angular range relative to directly behind the evader [rad]
+  # When set this overrides the ``sections`` breakdown into quadrants.
+  yaw_range: [-3.14159, 3.14159]
   # Minimum initial range from the evader [m]
   min_range: 1000.0
   # Maximum initial range from the evader [m]
@@ -90,6 +87,11 @@ pursuer_start:
   initial_speed_range: [50.0, 75.0]
 # Percentage error applied to angular measurements of the opposing agent
 measurement_error_pct: 0.0
+
+# Factor multiplying the starting distance between the agents that
+# triggers episode termination when their separation exceeds this
+# multiple.
+separation_cutoff_factor: 2.0
 
 # Training related options
 training:
@@ -113,3 +115,29 @@ training:
   eval_freq: 1000
   # Save a checkpoint every this many episodes. Set to 0 to disable.
   checkpoint_steps: 0
+  # Curriculum specifying how the starting conditions gradually expand
+  # throughout training. The ``start`` dictionary defines the easiest
+  # configuration while ``end`` corresponds to the final environment
+  # parameters. All numeric values are linearly interpolated from the
+  # beginning to the end of training.
+  curriculum:
+    start:
+      evader_start:
+        distance_range: [10000.0, 10000.0]
+      pursuer_start:
+        cone_half_angle: 0.0
+        inner_cone_half_angle: 0.0
+        min_range: 1000.0
+        max_range: 1000.0
+        yaw_range: [0.0, 0.0]
+        force_target_radius: 0.0
+    end:
+      evader_start:
+        distance_range: [8000.0, 12000.0]
+      pursuer_start:
+        cone_half_angle: 1.5
+        inner_cone_half_angle: 1.3
+        min_range: 1000.0
+        max_range: 5000.0
+        yaw_range: [-3.14159, 3.14159]
+        force_target_radius: 150.0

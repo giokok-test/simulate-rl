@@ -29,6 +29,40 @@ def load_config(path: str | None = None) -> dict:
 config = load_config()
 
 
+def _interpolate(start: float, end: float, progress: float) -> float:
+    """Linear interpolation helper."""
+    return start + (end - start) * progress
+
+
+def apply_curriculum(cfg: dict, start_cfg: dict, end_cfg: dict, progress: float) -> None:
+    """Recursively interpolate ``cfg`` between ``start_cfg`` and ``end_cfg``.
+
+    Only keys present in ``start_cfg`` and ``end_cfg`` are touched. Numeric
+    values are interpolated linearly while boolean values switch from the start
+    to the end setting halfway through the training run.
+    """
+
+    for key, start_val in start_cfg.items():
+        if key not in end_cfg or key not in cfg:
+            continue
+        end_val = end_cfg[key]
+        if isinstance(start_val, dict) and isinstance(end_val, dict):
+            apply_curriculum(cfg[key], start_val, end_val, progress)
+        elif isinstance(start_val, (int, float)) and isinstance(end_val, (int, float)):
+            cfg[key] = _interpolate(float(start_val), float(end_val), progress)
+        elif (
+            isinstance(start_val, (list, tuple))
+            and isinstance(end_val, (list, tuple))
+            and len(start_val) == len(end_val)
+        ):
+            cfg[key] = [
+                _interpolate(float(s), float(e), progress)
+                for s, e in zip(start_val, end_val)
+            ]
+        elif isinstance(start_val, bool) and isinstance(end_val, bool):
+            cfg[key] = end_val if progress >= 0.5 else start_val
+
+
 def sample_pursuer_start(evader_pos: np.ndarray, heading: np.ndarray, cfg: dict):
     """Sample initial pursuer state and force direction.
 
@@ -41,26 +75,31 @@ def sample_pursuer_start(evader_pos: np.ndarray, heading: np.ndarray, cfg: dict)
     inner = params.get("inner_cone_half_angle", 0.0)
     r = np.random.uniform(params["min_range"], params["max_range"])
 
-    # choose a spawn quadrant relative to the evader heading
     base_yaw = np.arctan2(heading[1], heading[0])
-    sections_cfg = params.get(
-        "sections",
-        {"front": True, "left": True, "right": True, "back": True},
-    )
-    quadrants = []
-    deg45 = np.deg2rad(45.0)
-    if sections_cfg.get("front", True):
-        quadrants.append((-deg45, deg45))
-    if sections_cfg.get("right", True):
-        quadrants.append((-deg45 - np.pi / 2, deg45 - np.pi / 2))
-    if sections_cfg.get("back", True):
-        quadrants.append((np.pi - deg45, np.pi + deg45))
-    if sections_cfg.get("left", True):
-        quadrants.append((deg45, deg45 + np.pi / 2))
-    if not quadrants:
-        raise ValueError("No pursuer spawn sections enabled")
-    yaw_rel = np.random.uniform(*quadrants[np.random.randint(len(quadrants))])
-    yaw = (base_yaw + yaw_rel) % (2 * np.pi)
+    if "yaw_range" in params:
+        # Angular range is measured relative to directly behind the evader.
+        yaw_min, yaw_max = params["yaw_range"]
+        yaw_rel = np.random.uniform(yaw_min, yaw_max)
+        yaw = (base_yaw + np.pi + yaw_rel) % (2 * np.pi)
+    else:
+        sections_cfg = params.get(
+            "sections",
+            {"front": True, "left": True, "right": True, "back": True},
+        )
+        quadrants = []
+        deg45 = np.deg2rad(45.0)
+        if sections_cfg.get("front", True):
+            quadrants.append((-deg45, deg45))
+        if sections_cfg.get("right", True):
+            quadrants.append((-deg45 - np.pi / 2, deg45 - np.pi / 2))
+        if sections_cfg.get("back", True):
+            quadrants.append((np.pi - deg45, np.pi + deg45))
+        if sections_cfg.get("left", True):
+            quadrants.append((deg45, deg45 + np.pi / 2))
+        if not quadrants:
+            raise ValueError("No pursuer spawn sections enabled")
+        yaw_rel = np.random.uniform(*quadrants[np.random.randint(len(quadrants))])
+        yaw = (base_yaw + yaw_rel) % (2 * np.pi)
 
     pitch = np.random.uniform(inner, outer)
     # direction from the evader to the pursuer in world coordinates
@@ -123,6 +162,8 @@ class PursuitEvasionEnv(gym.Env):
         # and the line of sight to the evader from one step to the next.
         self.angle_weight = self.cfg.get('angle_weight', 0.0)
         self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
+        # maximum allowed separation before the episode ends
+        self.cutoff_factor = self.cfg.get('separation_cutoff_factor', 2.0)
         # Convert stall angles provided in degrees to radians once
         self.cfg['evader']['stall_angle'] = np.deg2rad(
             self.cfg['evader']['stall_angle']
@@ -294,7 +335,7 @@ class PursuitEvasionEnv(gym.Env):
                 info['outcome'] = 'evader_ground'
             elif self.pursuer_pos[2] < 0.0:
                 info['outcome'] = 'pursuer_ground'
-            elif dist_pe >= 5 * self.start_pe_dist:
+            elif dist_pe >= self.cutoff_factor * self.start_pe_dist:
                 info['outcome'] = 'separation_exceeded'
 
         self.cur_step += 1
@@ -419,7 +460,7 @@ class PursuitEvasionEnv(gym.Env):
 
         if dist <= self.cfg['capture_radius']:
             return True, -1.0, 1.0
-        if dist >= 5 * self.start_pe_dist:
+        if dist >= self.cutoff_factor * self.start_pe_dist:
             return True, 0.0, 0.0
 
         # episode ends if either agent goes below ground level
