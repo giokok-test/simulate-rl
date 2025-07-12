@@ -22,6 +22,16 @@ training:
   outcome_window: 100
   # Save a checkpoint every this many episodes. Set to 0 to disable.
   checkpoint_steps: 2000
+  # Curriculum progression strategy: "linear" interpolates from the
+  # starting configuration to the final one over a fixed number of
+  # stages while "adaptive" advances only when the recent success
+  # rate exceeds ``success_threshold``.
+  curriculum_mode: linear
+  # Minimum fraction of successful episodes required to move to the
+  # next curriculum stage when ``curriculum_mode`` is "adaptive".
+  success_threshold: 0.8
+  # Window size used to compute the adaptive success rate.
+  curriculum_window: 50
   # Number of discrete curriculum stages including the final environment.
   # If set to ``N`` there will be ``N - 1`` transitions from ``curriculum.start``
   # to ``curriculum.end`` over the course of training.
