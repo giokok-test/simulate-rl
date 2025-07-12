@@ -115,6 +115,14 @@ training:
   eval_freq: 1000
   # Save a checkpoint every this many episodes. Set to 0 to disable.
   checkpoint_steps: 0
+  # Curriculum progression mode: linear | adaptive
+  curriculum_mode: linear
+  # Rolling success threshold for adaptive curriculum
+  curriculum_success_threshold: 0.8
+  # Number of evaluation results to average for adaptive curriculum
+  curriculum_window: 5
+  # Number of discrete curriculum stages
+  curriculum_stages: 5
   # Curriculum specifying how the starting conditions gradually expand
   # throughout training. The ``start`` dictionary defines the easiest
   # configuration while ``end`` corresponds to the final environment

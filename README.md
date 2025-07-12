@@ -117,6 +117,12 @@ agent immediately behind the evader before expanding to the full search
 area. The curriculum makes it possible to smoothly transition from simple
 encounters to more challenging ones.
 
+When `training.curriculum_mode` is set to `adaptive` the scripts track the
+rolling success rate of evaluation episodes. The pursuer spawn parameters are
+only expanded to the next curriculum stage once the average success exceeds
+`training.curriculum_success_threshold`. This allows the policy to focus on the
+current difficulty until it reliably solves it before moving on.
+
 ## Additional scripts
 
 - `pursuit_evasion.py` contains the environment implementation along with a

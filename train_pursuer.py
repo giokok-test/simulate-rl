@@ -11,6 +11,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import gymnasium as gym
 from typing import Optional
+from collections import deque
 
 TABLE_HEADER = (
     f"{'step':>5} | {'pursuer→evader [m]':>26} | "
@@ -222,6 +223,10 @@ def train(
     curriculum_cfg = training_cfg.get('curriculum')
     start_cur = curriculum_cfg.get('start') if curriculum_cfg else None
     end_cur = curriculum_cfg.get('end') if curriculum_cfg else None
+    curriculum_mode = training_cfg.get('curriculum_mode', 'linear')
+    success_threshold = training_cfg.get('curriculum_success_threshold', 0.8)
+    success_window = training_cfg.get('curriculum_window', 5)
+    curriculum_stages = training_cfg.get('curriculum_stages', 5)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = PursuerOnlyEnv(cfg)
@@ -251,10 +256,22 @@ def train(
     )
 
     efficiency_logged = False
+    success_history = deque(maxlen=success_window)
+    stage_idx = 0
     for episode in range(num_episodes):
-        progress = episode / max(num_episodes - 1, 1)
-        if start_cur and end_cur:
-            apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
+        if curriculum_mode == 'adaptive':
+            progress = stage_idx / max(curriculum_stages, 1)
+            if start_cur and end_cur:
+                apply_curriculum(
+                    env.env.cfg,
+                    {'pursuer_start': start_cur.get('pursuer_start', {})},
+                    {'pursuer_start': end_cur.get('pursuer_start', {})},
+                    progress,
+                )
+        else:
+            progress = episode / max(num_episodes - 1, 1)
+            if start_cur and end_cur:
+                apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
         # Collect one episode of experience
         obs, _ = env.reset()
         init_pursuer_pos = env.env.pursuer_pos.copy()
@@ -341,7 +358,15 @@ def train(
             # Periodically report progress on separate evaluation episodes
             eval_cfg = copy.deepcopy(cfg)
             if start_cur and end_cur:
-                apply_curriculum(eval_cfg, start_cur, end_cur, progress)
+                if curriculum_mode == 'adaptive':
+                    apply_curriculum(
+                        eval_cfg,
+                        {'pursuer_start': start_cur.get('pursuer_start', {})},
+                        {'pursuer_start': end_cur.get('pursuer_start', {})},
+                        progress,
+                    )
+                else:
+                    apply_curriculum(eval_cfg, start_cur, end_cur, progress)
             avg_r, success = evaluate(policy, PursuerOnlyEnv(eval_cfg))
             print(f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}")
             if writer:
@@ -354,6 +379,18 @@ def train(
                 ):
                     writer.add_scalar("sweep/episodes_to_reward", episode + 1, 0)
                     efficiency_logged = True
+            if curriculum_mode == 'adaptive':
+                success_history.append(success)
+                if (
+                    len(success_history) >= success_window
+                    and np.mean(success_history) >= success_threshold
+                    and stage_idx < curriculum_stages
+                ):
+                    stage_idx += 1
+                    success_history.clear()
+                    print(
+                        f"Advancing curriculum stage to {stage_idx}/{curriculum_stages}"
+                    )
         if checkpoint_every and save_path and (episode + 1) % checkpoint_every == 0:
             base, ext = os.path.splitext(save_path)
             ckpt_path = f"{base}_ckpt_{episode+1}{ext}"
@@ -363,7 +400,15 @@ def train(
     # Final evaluation after training
     eval_cfg = copy.deepcopy(cfg)
     if start_cur and end_cur:
-        apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
+        if curriculum_mode == 'adaptive':
+            apply_curriculum(
+                eval_cfg,
+                {'pursuer_start': start_cur.get('pursuer_start', {})},
+                {'pursuer_start': end_cur.get('pursuer_start', {})},
+                stage_idx / max(curriculum_stages, 1),
+            )
+        else:
+            apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
     avg_r, success = evaluate(policy, PursuerOnlyEnv(eval_cfg))
     print(f"Final performance: avg_reward={avg_r:.2f} success={success:.2f}")
     if writer:
@@ -437,6 +482,27 @@ if __name__ == "__main__":
         default="runs/reinforce",
         help="write TensorBoard logs to this directory",
     )
+    parser.add_argument(
+        "--curriculum-mode",
+        type=str,
+        choices=["linear", "adaptive"],
+        help="progress curriculum linearly or adaptively",
+    )
+    parser.add_argument(
+        "--success-threshold",
+        type=float,
+        help="success rate required to advance adaptive curriculum",
+    )
+    parser.add_argument(
+        "--curriculum-window",
+        type=int,
+        help="number of evals to average for adaptive curriculum",
+    )
+    parser.add_argument(
+        "--curriculum-stages",
+        type=int,
+        help="number of discrete curriculum stages",
+    )
     args = parser.parse_args()
 
     training_cfg = config.setdefault('training', {
@@ -450,6 +516,10 @@ if __name__ == "__main__":
         'reward_threshold': 0.0,
         'eval_freq': 1000,
         'checkpoint_steps': 0,
+        'curriculum_mode': 'linear',
+        'curriculum_success_threshold': 0.8,
+        'curriculum_window': 5,
+        'curriculum_stages': 5,
     })
     if args.episodes is not None:
         training_cfg['episodes'] = args.episodes
@@ -471,6 +541,14 @@ if __name__ == "__main__":
         training_cfg['eval_freq'] = args.eval_freq
     if args.checkpoint_every is not None:
         training_cfg['checkpoint_steps'] = args.checkpoint_every
+    if args.curriculum_mode is not None:
+        training_cfg['curriculum_mode'] = args.curriculum_mode
+    if args.success_threshold is not None:
+        training_cfg['curriculum_success_threshold'] = args.success_threshold
+    if args.curriculum_window is not None:
+        training_cfg['curriculum_window'] = args.curriculum_window
+    if args.curriculum_stages is not None:
+        training_cfg['curriculum_stages'] = args.curriculum_stages
     if args.time_step is not None:
         config['time_step'] = args.time_step
 
