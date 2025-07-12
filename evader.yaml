@@ -1,0 +1,26 @@
+evader:
+  # Mass of the evader aircraft [kg]
+  mass: 1500.0
+  # Maximum acceleration magnitude the evader can command [m/s^2]
+  max_acceleration: 15.0
+  # Upper speed limit [m/s]
+  top_speed: 100.0
+  # Dimensionless coefficient modelling drag
+  drag_coefficient: 0
+  # How much information the evader gets about the pursuer
+  #   1 - evader has no knowledge of the pursuer
+  #   2 - only the distance to the pursuer is observed
+  #   3 - evader receives the unit vector pointing to the pursuer
+  #   4 - full pursuer position is known (values >4 behave the same)
+  awareness_mode: 1
+  # Maximum yaw rotation rate [deg/s]
+  yaw_rate: 5
+  # Maximum pitch rotation rate [deg/s]
+  pitch_rate: 10
+  # Maximum allowable pitch angle [deg]
+  stall_angle: 45.0
+  # Preset trajectory mode. Use "dive" to level off until the dive angle
+  # threshold is reached
+  trajectory: direct
+  # Angle to the target at which the evader begins its dive [deg]
+  dive_angle: 20.0
