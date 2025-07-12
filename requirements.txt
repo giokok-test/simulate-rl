@@ -4,3 +4,4 @@ gymnasium
 matplotlib
 pyyaml
 tensorboard
+tensorflow
