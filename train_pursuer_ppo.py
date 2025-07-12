@@ -221,6 +221,7 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
     successes = 0
     min_dists = []
     steps = []
+    ratios = []
     outcome_counts = defaultdict(int)
     for _ in range(episodes):
         obs, _ = env.reset()
@@ -242,13 +243,20 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
         if info:
             min_dists.append(info.get('min_distance', np.nan))
             steps.append(info.get('episode_steps', np.nan))
+            start_d = info.get('start_distance')
+            min_d = info.get('min_distance')
+            if start_d and min_d is not None and start_d > 0:
+                ratios.append(min_d / start_d)
             outcome_counts[info.get('outcome', 'timeout')] += 1
 
     if min_dists:
-        print(
+        msg = (
             f"    eval metrics: mean_min_dist={np.nanmean(min_dists):.2f} "
             f"mean_steps={np.nanmean(steps):.1f}"
         )
+        if ratios:
+            msg += f" min_start_ratio={np.nanmean(ratios):.3f}"
+        print(msg)
     if outcome_counts:
         print(f"    termination counts: {dict(outcome_counts)}")
     return float(np.mean(rewards)), successes / episodes
@@ -538,16 +546,24 @@ def train(
                         info.get("min_distance", float("nan")),
                         episode,
                     )
+                writer.add_scalar(
+                    "train/episode_length",
+                    info.get("episode_steps", step),
+                    episode,
+                )
+                start_d = info.get("start_distance")
+                min_d = info.get("min_distance")
+                if start_d is not None and min_d is not None and start_d > 0:
                     writer.add_scalar(
-                        "train/episode_length",
-                        info.get("episode_steps", step),
+                        "train/min_start_ratio",
+                        float(min_d) / float(start_d),
                         episode,
                     )
-                    rb = info.get("reward_breakdown", {})
-                    for k, v in rb.items():
-                        # Ensure we pass a Python float (0-dim tensor) to add_scalar
-                        scalar_reward = float((v / n_info).mean())
-                        writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
+                rb = info.get("reward_breakdown", {})
+                for k, v in rb.items():
+                    # Ensure we pass a Python float (0-dim tensor) to add_scalar
+                    scalar_reward = float((v / n_info).mean())
+                    writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
             if info:
                 outcome = info.get('outcome', 'timeout')
                 outcome_counts[outcome] += 1
@@ -597,6 +613,7 @@ def train(
                 n_info = 0
                 min_list = []
                 len_list = []
+                start_list = []
                 for inf in infos:
                     if inf:
                         n_info += 1
@@ -609,6 +626,8 @@ def train(
                             min_list.append(inf["min_distance"])
                         if "episode_steps" in inf:
                             len_list.append(inf["episode_steps"])
+                        if "start_distance" in inf:
+                            start_list.append(inf["start_distance"])
                 if n_info:
                     for k, v in rb_sum.items():
                         scalar_reward = float((v / n_info).mean())
@@ -617,6 +636,10 @@ def train(
                         writer.add_scalar("train/min_distance", float(np.mean(min_list)), episode)
                     if len_list:
                         writer.add_scalar("train/episode_length", float(np.mean(len_list)), episode)
+                    if min_list and start_list:
+                        ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
+                        if ratios:
+                            writer.add_scalar("train/min_start_ratio", float(np.mean(ratios)), episode)
                 if (episode + 1) % outcome_window == 0:
                     total = sum(outcome_counts.values())
                     for k, c in outcome_counts.items():

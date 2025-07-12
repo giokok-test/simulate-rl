@@ -133,10 +133,15 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
     if info:
         min_d = info.get('min_distance')
         closest = f"{min_d:.2f}" if min_d is not None else "n/a"
+        start_d = info.get('start_distance')
+        ratio = (
+            f"{min_d / start_d:.3f}" if min_d is not None and start_d and start_d > 0 else "n/a"
+        )
         print(
             f"Steps: {info.get('episode_steps', 'n/a')}  "
             f"closest={closest}  "
-            f"start={info.get('start_distance', float('nan')):.2f}  "
+            f"start={start_d:.2f}  "
+            f"ratio={ratio}  "
             f"outcome={info.get('outcome', 'unknown')}"
         )
 

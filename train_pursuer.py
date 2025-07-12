@@ -186,6 +186,7 @@ def evaluate(policy: PursuerPolicy, env: PursuerOnlyEnv, episodes: int = 5) -> t
     successes = 0
     min_dists = []
     steps = []
+    ratios = []
     for _ in range(episodes):
         obs, _ = env.reset()
         done = False
@@ -202,12 +203,19 @@ def evaluate(policy: PursuerPolicy, env: PursuerOnlyEnv, episodes: int = 5) -> t
         if info:
             min_dists.append(info.get('min_distance', np.nan))
             steps.append(info.get('episode_steps', np.nan))
+            start_d = info.get('start_distance')
+            min_d = info.get('min_distance')
+            if start_d and min_d is not None and start_d > 0:
+                ratios.append(min_d / start_d)
 
     if min_dists:
-        print(
+        msg = (
             f"    eval metrics: mean_min_dist={np.nanmean(min_dists):.2f} "
             f"mean_steps={np.nanmean(steps):.1f}"
         )
+        if ratios:
+            msg += f" min_start_ratio={np.nanmean(ratios):.3f}"
+        print(msg)
     return float(np.mean(rewards)), successes / episodes
 
 
@@ -365,6 +373,14 @@ def train(
                     info.get("episode_steps", step),
                     episode,
                 )
+                start_d = info.get("start_distance")
+                min_d = info.get("min_distance")
+                if start_d is not None and min_d is not None and start_d > 0:
+                    writer.add_scalar(
+                        "train/min_start_ratio",
+                        float(min_d) / float(start_d),
+                        episode,
+                    )
                 rb = info.get("reward_breakdown", {})
                 for k, v in rb.items():
                     writer.add_scalar(f"train/reward_{k}", v, episode)
