@@ -8,21 +8,33 @@ import os
 import copy
 
 
-
 def load_config(path: str | None = None) -> dict:
-    """Load configuration parameters from ``config.yaml``.
+    """Load configuration parameters.
 
-    Parameters
-    ----------
-    path : str or None, optional
-        Optional path to a YAML configuration file. When ``None`` the
-        ``config.yaml`` next to this module is used.
+    When ``path`` is ``None`` the function reads ``evader.yaml``,
+    ``pursuer.yaml``, ``env.yaml`` and ``training.yaml`` located next to this
+    file and merges them into a single dictionary.  If ``path`` points to a
+    directory the same file names are loaded from that directory.  Supplying a
+    path to a specific YAML file preserves the original behaviour and returns
+    its contents directly.
     """
 
     if path is None:
-        path = os.path.join(os.path.dirname(__file__), "config.yaml")
-    with open(path, "r") as fh:
-        return yaml.safe_load(fh)
+        base = os.path.dirname(__file__)
+    elif os.path.isdir(path):
+        base = path
+    else:
+        with open(path, "r") as fh:
+            return yaml.safe_load(fh)
+
+    cfg: dict = {}
+    for name in ("evader.yaml", "pursuer.yaml", "env.yaml", "training.yaml"):
+        fp = os.path.join(base, name)
+        if os.path.exists(fp):
+            with open(fp, "r") as fh:
+                part = yaml.safe_load(fh) or {}
+            cfg.update(part)
+    return cfg
 
 
 # Global configuration dictionary for the environment and agents

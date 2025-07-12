@@ -1,13 +1,9 @@
-import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-
-def load_config(path="config.yaml"):
-    with open(path, "r") as fh:
-        return yaml.safe_load(fh)
+from pursuit_evasion import load_config
 
 
 def draw_ring(ax, center, radius, z, **kw):

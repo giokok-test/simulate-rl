@@ -1,0 +1,16 @@
+pursuer:
+  # Mass of the pursuer [kg]
+  mass: 100.0
+  # Maximum acceleration magnitude [m/s^2]
+  max_acceleration: 30.0
+  # Commanded acceleration magnitude [non-negative]
+  # Upper speed limit [m/s]
+  top_speed: 150.0
+  # Dimensionless coefficient modelling drag
+  drag_coefficient: 0.0
+  # Maximum yaw rotation rate [deg/s]
+  yaw_rate: 20.0
+  # Maximum pitch rotation rate [deg/s]
+  pitch_rate: 25.0
+  # Maximum allowable pitch angle [deg]
+  stall_angle: 55.0
