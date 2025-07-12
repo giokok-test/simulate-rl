@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import gymnasium as gym
 from typing import Optional
-from collections import defaultdict
+from collections import defaultdict, deque
 import yaml
 
 TABLE_HEADER = (
@@ -221,6 +221,7 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
     successes = 0
     min_dists = []
     steps = []
+    ratios = []
     outcome_counts = defaultdict(int)
     for _ in range(episodes):
         obs, _ = env.reset()
@@ -242,13 +243,20 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
         if info:
             min_dists.append(info.get('min_distance', np.nan))
             steps.append(info.get('episode_steps', np.nan))
+            start_d = info.get('start_distance')
+            min_d = info.get('min_distance')
+            if start_d and min_d is not None and start_d > 0:
+                ratios.append(min_d / start_d)
             outcome_counts[info.get('outcome', 'timeout')] += 1
 
     if min_dists:
-        print(
+        msg = (
             f"    eval metrics: mean_min_dist={np.nanmean(min_dists):.2f} "
             f"mean_steps={np.nanmean(steps):.1f}"
         )
+        if ratios:
+            msg += f" min_start_ratio={np.nanmean(ratios):.3f}"
+        print(msg)
     if outcome_counts:
         print(f"    termination counts: {dict(outcome_counts)}")
     return float(np.mean(rewards)), successes / episodes
@@ -295,6 +303,9 @@ def train(
     eval_freq = training_cfg.get('eval_freq', 10)
     curriculum_stages = training_cfg.get('curriculum_stages', 2)
     outcome_window = training_cfg.get('outcome_window', 100)
+    curriculum_mode = training_cfg.get('curriculum_mode', 'linear')
+    success_threshold = training_cfg.get('success_threshold', 0.8)
+    curriculum_window = training_cfg.get('curriculum_window', 50)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
     curriculum_cfg = training_cfg.get('curriculum')
@@ -348,11 +359,14 @@ def train(
     outcome_counts = defaultdict(int)
     # ``curriculum_stages`` counts the discrete phases from the starting
     # configuration to the final one. There are ``curriculum_stages - 1``
-    # transitions, and ``stage_idx`` selects the active stage.
+    # transitions. ``stage_idx`` selects the active stage.
     num_transitions = max(curriculum_stages - 1, 1)
+    stage_idx = 0
+    recent = deque(maxlen=curriculum_window)
 
     for episode in range(num_episodes):
-        stage_idx = (episode * num_transitions) // max(num_episodes - 1, 1)
+        if curriculum_mode == 'linear':
+            stage_idx = (episode * num_transitions) // max(num_episodes - 1, 1)
         progress = stage_idx / num_transitions
         episode_progress = episode / max(num_episodes - 1, 1)
         entropy_coef = entropy_start + (entropy_end - entropy_start) * episode_progress
@@ -538,19 +552,36 @@ def train(
                         info.get("min_distance", float("nan")),
                         episode,
                     )
+                writer.add_scalar(
+                    "train/episode_length",
+                    info.get("episode_steps", step),
+                    episode,
+                )
+                start_d = info.get("start_distance")
+                min_d = info.get("min_distance")
+                if start_d is not None and min_d is not None and start_d > 0:
                     writer.add_scalar(
-                        "train/episode_length",
-                        info.get("episode_steps", step),
+                        "train/min_start_ratio",
+                        float(min_d) / float(start_d),
                         episode,
                     )
-                    rb = info.get("reward_breakdown", {})
-                    for k, v in rb.items():
-                        # Ensure we pass a Python float (0-dim tensor) to add_scalar
-                        scalar_reward = float((v / n_info).mean())
-                        writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
+                rb = info.get("reward_breakdown", {})
+                for k, v in rb.items():
+                    # Ensure we pass a Python float (0-dim tensor) to add_scalar
+                    scalar_reward = float((v / n_info).mean())
+                    writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
             if info:
                 outcome = info.get('outcome', 'timeout')
                 outcome_counts[outcome] += 1
+                if curriculum_mode == 'adaptive':
+                    recent.append(1 if outcome == 'capture' else 0)
+                    if (
+                        len(recent) >= curriculum_window
+                        and sum(recent) / len(recent) >= success_threshold
+                        and stage_idx < num_transitions
+                    ):
+                        stage_idx += 1
+                        recent.clear()
                 if (episode + 1) % outcome_window == 0 and writer:
                     total = sum(outcome_counts.values())
                     for k, c in outcome_counts.items():
@@ -597,6 +628,7 @@ def train(
                 n_info = 0
                 min_list = []
                 len_list = []
+                start_list = []
                 for inf in infos:
                     if inf:
                         n_info += 1
@@ -605,10 +637,21 @@ def train(
                         outcome = inf.get("outcome", "timeout")
                         outcome_counts[outcome] += 1
                         episode_outcomes[outcome] += 1
+                        if curriculum_mode == 'adaptive':
+                            recent.append(1 if outcome == 'capture' else 0)
+                            if (
+                                len(recent) >= curriculum_window
+                                and sum(recent) / len(recent) >= success_threshold
+                                and stage_idx < num_transitions
+                            ):
+                                stage_idx += 1
+                                recent.clear()
                         if "min_distance" in inf:
                             min_list.append(inf["min_distance"])
                         if "episode_steps" in inf:
                             len_list.append(inf["episode_steps"])
+                        if "start_distance" in inf:
+                            start_list.append(inf["start_distance"])
                 if n_info:
                     for k, v in rb_sum.items():
                         scalar_reward = float((v / n_info).mean())
@@ -617,6 +660,10 @@ def train(
                         writer.add_scalar("train/min_distance", float(np.mean(min_list)), episode)
                     if len_list:
                         writer.add_scalar("train/episode_length", float(np.mean(len_list)), episode)
+                    if min_list and start_list:
+                        ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
+                        if ratios:
+                            writer.add_scalar("train/min_start_ratio", float(np.mean(ratios)), episode)
                 if (episode + 1) % outcome_window == 0:
                     total = sum(outcome_counts.values())
                     for k, c in outcome_counts.items():
@@ -749,6 +796,22 @@ if __name__ == "__main__":
         help="number of discrete curriculum stages including the final one",
     )
     parser.add_argument(
+        "--curriculum-mode",
+        type=str,
+        choices=["linear", "adaptive"],
+        help="curriculum progression mode",
+    )
+    parser.add_argument(
+        "--success-threshold",
+        type=float,
+        help="success rate required to advance the curriculum",
+    )
+    parser.add_argument(
+        "--curriculum-window",
+        type=int,
+        help="episodes used to compute adaptive success rate",
+    )
+    parser.add_argument(
         "--outcome-window",
         type=int,
         help="episodes per bin for termination statistics",
@@ -777,6 +840,9 @@ if __name__ == "__main__":
             'reward_threshold': 0.0,
             'eval_freq': 1000,
             'checkpoint_steps': 0,
+            'curriculum_mode': 'linear',
+            'success_threshold': 0.8,
+            'curriculum_window': 50,
             'curriculum_stages': 2,
             'gamma': 0.99,
             'clip_ratio': 0.2,
@@ -806,6 +872,12 @@ if __name__ == "__main__":
         training_cfg['eval_freq'] = args.eval_freq
     if args.checkpoint_every is not None:
         training_cfg['checkpoint_steps'] = args.checkpoint_every
+    if args.curriculum_mode is not None:
+        training_cfg['curriculum_mode'] = args.curriculum_mode
+    if args.success_threshold is not None:
+        training_cfg['success_threshold'] = args.success_threshold
+    if args.curriculum_window is not None:
+        training_cfg['curriculum_window'] = args.curriculum_window
     if args.gamma is not None:
         training_cfg['gamma'] = args.gamma
     if args.clip_ratio is not None:
