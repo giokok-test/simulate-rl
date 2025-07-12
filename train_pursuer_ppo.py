@@ -152,11 +152,43 @@ class ActorCritic(nn.Module):
         super().__init__()
         self.policy_net = _make_mlp(obs_dim, 3, hidden_size, activation)
         self.value_net = _make_mlp(obs_dim, 1, hidden_size, activation)
+        # Log standard deviation for the Gaussian policy. Using ``zeros``
+        # initialisation mirrors the previous unit variance behaviour.
+        self.log_std = nn.Parameter(torch.zeros(3))
 
     def forward(self, obs: torch.Tensor):
         mean = self.policy_net(obs)
         value = self.value_net(obs).squeeze(-1)
         return mean, value
+
+    @property
+    def std(self) -> torch.Tensor:
+        """Return the action standard deviation."""
+        return self.log_std.exp()
+
+
+def compute_gae(
+    rewards: list[float] | torch.Tensor,
+    values: list[torch.Tensor] | torch.Tensor,
+    *,
+    gamma: float = 0.99,
+    lam: float = 0.95,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return discounted returns and advantages using GAE."""
+
+    if not torch.is_tensor(values):
+        values = torch.stack(list(values))
+    if not torch.is_tensor(rewards):
+        rewards = torch.tensor(rewards, dtype=torch.float32, device=values.device)
+    advantages = torch.zeros_like(rewards, device=values.device)
+    gae = 0.0
+    for t in reversed(range(len(rewards))):
+        next_value = values[t + 1] if t + 1 < len(values) else 0.0
+        delta = rewards[t] + gamma * next_value - values[t]
+        gae = delta + gamma * lam * gae
+        advantages[t] = gae
+    returns = advantages + values
+    return returns, advantages
 
 
 def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
@@ -173,7 +205,8 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
             with torch.no_grad():
                 obs_t = torch.tensor(obs, device=next(model.parameters()).device)
                 mean, _ = model(obs_t)
-                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = model.std.expand_as(mean)
+                dist = torch.distributions.Normal(mean, std)
                 action = dist.mean
             obs, r, done, _, info = env.step(action.cpu().numpy())
             total += r
@@ -265,10 +298,11 @@ def train(
         else None
     )
 
-    gamma = 0.99
-    clip_ratio = 0.2
-    ppo_epochs = 4
-    entropy_coef = 0.01
+    gamma = training_cfg.get('gamma', 0.99)
+    clip_ratio = training_cfg.get('clip_ratio', 0.2)
+    ppo_epochs = training_cfg.get('ppo_epochs', 4)
+    entropy_start = training_cfg.get('entropy_coef_start', 0.01)
+    entropy_end = training_cfg.get('entropy_coef_end', entropy_start)
 
     header = (
         f"{'step':>5} | {'pursuer→evader [m]':>26} | "
@@ -281,6 +315,7 @@ def train(
 
     for episode in range(num_episodes):
         progress = episode / max(num_episodes - 1, 1)
+        entropy_coef = entropy_start + (entropy_end - entropy_start) * progress
         if start_cur and end_cur:
             if num_envs == 1:
                 apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
@@ -307,7 +342,8 @@ def train(
             while not done:
                 obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
                 mean, value = model(obs_t)
-                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = model.std.expand_as(mean)
+                dist = torch.distributions.Normal(mean, std)
                 action = dist.sample()
                 log_prob = dist.log_prob(action).sum()
                 next_obs, r, done, _, info = env.step(action.cpu().numpy())
@@ -326,14 +362,13 @@ def train(
                 obs = next_obs
                 step += 1
 
-            returns = []
-            G = 0.0
-            for r in reversed(rewards):
-                G = r + gamma * G
-                returns.insert(0, G)
-            returns = torch.tensor(returns, dtype=torch.float32, device=device)
             values_t = torch.stack(values)
-            advantages = returns - values_t
+            returns, advantages = compute_gae(
+                rewards, values_t, gamma=gamma, lam=0.95
+            # Normalize advantages for more stable updates
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
 
             obs_batch = torch.stack(obs_list)
             action_batch = torch.stack(actions)
@@ -352,7 +387,8 @@ def train(
             while not np.all(done):
                 obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
                 mean, value = model(obs_t)
-                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = model.std.expand_as(mean)
+                dist = torch.distributions.Normal(mean, std)
                 action = dist.sample()
                 log_prob = dist.log_prob(action).sum(dim=1)
                 next_obs, r, d, _, info = env.step(action.cpu().numpy())
@@ -374,27 +410,33 @@ def train(
             log_list = []
             obs_stack = []
             action_stack = []
+            adv_list = []
             for i in range(num_envs):
-                G = 0.0
-                returns_i = []
-                for rr in reversed(rewards[i]):
-                    G = rr + gamma * G
-                    returns_i.insert(0, G)
-                ret_list.append(torch.tensor(returns_i, dtype=torch.float32, device=device))
-                val_list.append(torch.stack(values[i]))
+                vals_i = torch.stack(values[i])
+                rets_i, adv_i = compute_gae(
+                    rewards[i], vals_i, gamma=gamma, lam=0.95
+                )
+                ret_list.append(rets_i)
+                adv_list.append(adv_i)
+                val_list.append(vals_i)
                 log_list.append(torch.stack(log_probs[i]))
                 obs_stack.append(torch.stack(obs_list[i]))
                 action_stack.append(torch.stack(actions[i]))
             returns = torch.cat(ret_list)
             values_t = torch.cat(val_list)
-            advantages = returns - values_t
+            advantages = torch.cat(adv_list)
+            # Normalize advantages for more stable updates
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
             obs_batch = torch.cat(obs_stack)
             action_batch = torch.cat(action_stack)
             old_log_probs = torch.cat(log_list)
 
         for _ in range(ppo_epochs):
             mean, value = model(obs_batch)
-            dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+            std = model.std.expand_as(mean)
+            dist = torch.distributions.Normal(mean, std)
             log_probs_new = dist.log_prob(action_batch).sum(dim=1)
             entropy = dist.entropy().sum(dim=1)
             ratio = torch.exp(log_probs_new - old_log_probs)
@@ -412,6 +454,7 @@ def train(
 
         if writer:
             writer.add_scalar("train/loss", loss.item(), episode)
+            writer.add_scalar("train/entropy_coef", entropy_coef, episode)
 
         if num_envs == 1:
             print(f"Initial pursuer pos: {init_pursuer_pos}")
@@ -561,6 +604,21 @@ if __name__ == "__main__":
         default=1,
         help="number of parallel environments",
     )
+    parser.add_argument("--gamma", type=float, help="discount factor")
+    parser.add_argument("--clip-ratio", type=float, help="PPO clipping ratio")
+    parser.add_argument(
+        "--ppo-epochs", type=int, help="number of optimisation epochs per batch"
+    )
+    parser.add_argument(
+        "--entropy-coef-start",
+        type=float,
+        help="initial entropy bonus weight",
+    )
+    parser.add_argument(
+        "--entropy-coef-end",
+        type=float,
+        help="final entropy bonus weight",
+    )
     args = parser.parse_args()
 
     training_cfg = config.setdefault(
@@ -575,6 +633,11 @@ if __name__ == "__main__":
             'reward_threshold': 0.0,
             'eval_freq': 1000,
             'checkpoint_steps': 0,
+            'gamma': 0.99,
+            'clip_ratio': 0.2,
+            'ppo_epochs': 4,
+            'entropy_coef_start': 0.01,
+            'entropy_coef_end': 0.01,
         },
     )
     if args.episodes is not None:
@@ -597,6 +660,16 @@ if __name__ == "__main__":
         training_cfg['eval_freq'] = args.eval_freq
     if args.checkpoint_every is not None:
         training_cfg['checkpoint_steps'] = args.checkpoint_every
+    if args.gamma is not None:
+        training_cfg['gamma'] = args.gamma
+    if args.clip_ratio is not None:
+        training_cfg['clip_ratio'] = args.clip_ratio
+    if args.ppo_epochs is not None:
+        training_cfg['ppo_epochs'] = args.ppo_epochs
+    if args.entropy_coef_start is not None:
+        training_cfg['entropy_coef_start'] = args.entropy_coef_start
+    if args.entropy_coef_end is not None:
+        training_cfg['entropy_coef_end'] = args.entropy_coef_end
     if args.time_step is not None:
         config['time_step'] = args.time_step
 
