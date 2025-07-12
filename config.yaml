@@ -62,6 +62,8 @@ heading_weight: 0.0
 # receives ``1 + capture_bonus * (max_steps - episode_steps)`` when a capture
 # occurs, allowing earlier interceptions to yield higher returns.
 capture_bonus: 0.0
+# Penalty applied when the pursuer crashes into the ground
+pursuer_ground_penalty: -1.0
 # Coordinates of the evader's goal [m]
 target_position: [0, 0.0, 0.0]
 evader_start:
