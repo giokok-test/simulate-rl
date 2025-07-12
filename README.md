@@ -113,7 +113,8 @@ interpolated over the course of training. Any numeric field under these
 dictionaries will be linearly scaled from the `start` value to the `end`
 value as episodes progress. For example, the default configuration narrows
 the pursuer's `yaw_range` and initial `force_target_radius` to begin the
-agent immediately behind the evader before expanding to the full search
+agent immediately behind the evader while increasing `evader_start.initial_speed`
+from 0&nbsp;m/s to 50&nbsp;m/s before expanding to the full search
 area. The curriculum makes it possible to smoothly transition from simple
 encounters to more challenging ones.
 
