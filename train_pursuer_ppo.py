@@ -221,6 +221,7 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
     successes = 0
     min_dists = []
     steps = []
+    outcome_counts = defaultdict(int)
     for _ in range(episodes):
         obs, _ = env.reset()
         done = False
@@ -241,12 +242,15 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
         if info:
             min_dists.append(info.get('min_distance', np.nan))
             steps.append(info.get('episode_steps', np.nan))
+            outcome_counts[info.get('outcome', 'timeout')] += 1
 
     if min_dists:
         print(
             f"    eval metrics: mean_min_dist={np.nanmean(min_dists):.2f} "
             f"mean_steps={np.nanmean(steps):.1f}"
         )
+    if outcome_counts:
+        print(f"    termination counts: {dict(outcome_counts)}")
     return float(np.mean(rewards)), successes / episodes
 
 
@@ -553,6 +557,10 @@ def train(
                         writer.add_scalar(
                             f"termination/{k}", c / total, episode
                         )
+                    print(
+                        f"Termination counts (last {outcome_window} episodes): "
+                        f"{dict(outcome_counts)}"
+                    )
                     outcome_counts = defaultdict(int)
                 print(
                     f"Episode {episode+1}: reward={episode_reward:.2f} "
@@ -570,6 +578,20 @@ def train(
             episode_reward = sum(sum(r) for r in rewards) / num_envs
             if writer:
                 writer.add_scalar("train/episode_reward", episode_reward, episode)
+                md_vals = [inf.get("min_distance", float("nan")) for inf in infos if inf]
+                step_vals = [inf.get("episode_steps", float("nan")) for inf in infos if inf]
+                if md_vals:
+                    writer.add_scalar(
+                        "train/min_distance",
+                        float(np.nanmean(md_vals)),
+                        episode,
+                    )
+                if step_vals:
+                    writer.add_scalar(
+                        "train/episode_length",
+                        float(np.nanmean(step_vals)),
+                        episode,
+                    )
                 rb_sum = defaultdict(float)
                 n_info = 0
                 for inf in infos:
@@ -589,6 +611,10 @@ def train(
                         writer.add_scalar(
                             f"termination/{k}", c / total, episode
                         )
+                    print(
+                        f"Termination counts (last {outcome_window} episodes): "
+                        f"{dict(outcome_counts)}"
+                    )
                     outcome_counts = defaultdict(int)
 
         if (episode + 1) % eval_freq == 0:
