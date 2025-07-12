@@ -541,7 +541,9 @@ def train(
                     )
                     rb = info.get("reward_breakdown", {})
                     for k, v in rb.items():
-                        writer.add_scalar(f"train/reward_{k}", v, episode)
+                        # Ensure we pass a Python float (0-dim tensor) to add_scalar
+                        scalar_reward = float((v / n_info).mean())
+                        writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
             if info:
                 outcome = info.get('outcome', 'timeout')
                 outcome_counts[outcome] += 1
@@ -578,7 +580,9 @@ def train(
                         outcome_counts[inf.get("outcome", "timeout")] += 1
                 if n_info:
                     for k, v in rb_sum.items():
-                        writer.add_scalar(f"train/reward_{k}", v / n_info, episode)
+                        # Ensure we pass a Python float (0-dim tensor) to add_scalar
+                        scalar_reward = float((v / n_info).mean())
+                        writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
                 if (episode + 1) % outcome_window == 0:
                     total = sum(outcome_counts.values())
                     for k, c in outcome_counts.items():
