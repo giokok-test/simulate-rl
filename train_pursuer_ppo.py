@@ -103,7 +103,7 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
 class PursuerOnlyEnv(gym.Env):
     """Environment exposing only the pursuer."""
 
-    def __init__(self, cfg: dict, max_steps: int | None = None):
+    def __init__(self, cfg: dict, max_steps: int | None = None, capture_bonus: float = 0.0):
         super().__init__()
         self.env = PursuitEvasionEnv(cfg)
         self.observation_space = self.env.observation_space['pursuer']
@@ -113,6 +113,7 @@ class PursuerOnlyEnv(gym.Env):
             self.max_steps = int(duration * 60.0 / cfg['time_step'])
         else:
             self.max_steps = max_steps
+        self.capture_bonus = capture_bonus
         self.cur_step = 0
 
     def reset(self, *, seed=None, options=None):
@@ -127,6 +128,10 @@ class PursuerOnlyEnv(gym.Env):
             {'pursuer': action, 'evader': e_action}
         )
         info.setdefault('start_distance', float(self.env.start_pe_dist))
+        r_p = float(reward['pursuer'])
+        if done and info.get('outcome') == 'capture':
+            steps = info.get('episode_steps', self.cur_step + 1)
+            r_p += self.capture_bonus * (self.max_steps - steps)
         self.cur_step += 1
         if self.cur_step >= self.max_steps and not done:
             done = True
@@ -138,7 +143,7 @@ class PursuerOnlyEnv(gym.Env):
             info.setdefault('evader_to_target', float(dist_target))
             info.setdefault('start_distance', float(self.env.start_pe_dist))
             info['outcome'] = 'timeout'
-        return obs['pursuer'].astype(np.float32), float(reward['pursuer']), done, truncated, info
+        return obs['pursuer'].astype(np.float32), r_p, done, truncated, info
 
 
 class ActorCritic(nn.Module):
@@ -148,11 +153,43 @@ class ActorCritic(nn.Module):
         super().__init__()
         self.policy_net = _make_mlp(obs_dim, 3, hidden_size, activation)
         self.value_net = _make_mlp(obs_dim, 1, hidden_size, activation)
+        # Log standard deviation for the Gaussian policy. Using ``zeros``
+        # initialisation mirrors the previous unit variance behaviour.
+        self.log_std = nn.Parameter(torch.zeros(3))
 
     def forward(self, obs: torch.Tensor):
         mean = self.policy_net(obs)
         value = self.value_net(obs).squeeze(-1)
         return mean, value
+
+    @property
+    def std(self) -> torch.Tensor:
+        """Return the action standard deviation."""
+        return self.log_std.exp()
+
+
+def compute_gae(
+    rewards: list[float] | torch.Tensor,
+    values: list[torch.Tensor] | torch.Tensor,
+    *,
+    gamma: float = 0.99,
+    lam: float = 0.95,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return discounted returns and advantages using GAE."""
+
+    if not torch.is_tensor(values):
+        values = torch.stack(list(values))
+    if not torch.is_tensor(rewards):
+        rewards = torch.tensor(rewards, dtype=torch.float32, device=values.device)
+    advantages = torch.zeros_like(rewards, device=values.device)
+    gae = 0.0
+    for t in reversed(range(len(rewards))):
+        next_value = values[t + 1] if t + 1 < len(values) else 0.0
+        delta = rewards[t] + gamma * next_value - values[t]
+        gae = delta + gamma * lam * gae
+        advantages[t] = gae
+    returns = advantages + values
+    return returns, advantages
 
 
 def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
@@ -169,7 +206,8 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
             with torch.no_grad():
                 obs_t = torch.tensor(obs, device=next(model.parameters()).device)
                 mean, _ = model(obs_t)
-                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = model.std.expand_as(mean)
+                dist = torch.distributions.Normal(mean, std)
                 action = dist.mean
             obs, r, done, _, info = env.step(action.cpu().numpy())
             total += r
@@ -195,7 +233,7 @@ def train(
     checkpoint_every: int | None = None,
     resume_from: str | None = None,
     log_dir: str | None = None,
-    num_envs: int = 1,
+    num_envs: int = 8,
 ):
     """Train the pursuer policy using PPO.
 
@@ -227,6 +265,7 @@ def train(
     activation = training_cfg.get('activation', 'relu')
     reward_threshold = training_cfg.get('reward_threshold', 0.0)
     eval_freq = training_cfg.get('eval_freq', 10)
+    curriculum_stages = training_cfg.get('curriculum_stages', 2)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
     curriculum_cfg = training_cfg.get('curriculum')
@@ -242,7 +281,7 @@ def train(
         def _make() -> PursuerOnlyEnv:
             return PursuerOnlyEnv(cfg)
 
-        env = gym.vector.AsyncVectorEnv([_make for _ in range(num_envs)])
+        env = gym.vector.SyncVectorEnv([_make for _ in range(num_envs)])
         obs_space = env.single_observation_space
     else:
         env = PursuerOnlyEnv(cfg)
@@ -265,10 +304,11 @@ def train(
         else None
     )
 
-    gamma = 0.99
-    clip_ratio = 0.2
-    ppo_epochs = 4
-    entropy_coef = 0.01
+    gamma = training_cfg.get('gamma', 0.99)
+    clip_ratio = training_cfg.get('clip_ratio', 0.2)
+    ppo_epochs = training_cfg.get('ppo_epochs', 4)
+    entropy_start = training_cfg.get('entropy_coef_start', 0.01)
+    entropy_end = training_cfg.get('entropy_coef_end', entropy_start)
 
     header = (
         f"{'step':>5} | {'pursuer→evader [m]':>26} | "
@@ -280,11 +320,18 @@ def train(
     efficiency_logged = False
     success_history = deque(maxlen=success_window)
     stage_idx = 0
+    num_transitions = max(curriculum_stages - 1, 1)
 
     for episode in range(num_episodes):
         if curriculum_mode == 'adaptive':
             progress = stage_idx / max(curriculum_stages, 1)
-            if start_cur and end_cur:
+        else:
+            stage_idx = (episode * num_transitions) // max(num_episodes - 1, 1)
+            progress = stage_idx / num_transitions
+        episode_progress = episode / max(num_episodes - 1, 1)
+        entropy_coef = entropy_start + (entropy_end - entropy_start) * episode_progress
+        if start_cur and end_cur:
+            if curriculum_mode == 'adaptive':
                 if num_envs == 1:
                     apply_curriculum(
                         env.env.cfg,
@@ -300,9 +347,7 @@ def train(
                             {'pursuer_start': end_cur.get('pursuer_start', {})},
                             progress,
                         )
-        else:
-            progress = episode / max(num_episodes - 1, 1)
-            if start_cur and end_cur:
+            else:
                 if num_envs == 1:
                     apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
                 else:
@@ -328,7 +373,8 @@ def train(
             while not done:
                 obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
                 mean, value = model(obs_t)
-                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = model.std.expand_as(mean)
+                dist = torch.distributions.Normal(mean, std)
                 action = dist.sample()
                 log_prob = dist.log_prob(action).sum()
                 next_obs, r, done, _, info = env.step(action.cpu().numpy())
@@ -347,14 +393,14 @@ def train(
                 obs = next_obs
                 step += 1
 
-            returns = []
-            G = 0.0
-            for r in reversed(rewards):
-                G = r + gamma * G
-                returns.insert(0, G)
-            returns = torch.tensor(returns, dtype=torch.float32, device=device)
             values_t = torch.stack(values)
-            advantages = returns - values_t
+            returns, advantages = compute_gae(
+                rewards, values_t, gamma=gamma, lam=0.95
+            )
+            # Normalize advantages for more stable updates
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
 
             obs_batch = torch.stack(obs_list)
             action_batch = torch.stack(actions)
@@ -373,10 +419,23 @@ def train(
             while not np.all(done):
                 obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
                 mean, value = model(obs_t)
-                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = model.std.expand_as(mean)
+                dist = torch.distributions.Normal(mean, std)
                 action = dist.sample()
                 log_prob = dist.log_prob(action).sum(dim=1)
                 next_obs, r, d, _, info = env.step(action.cpu().numpy())
+                if isinstance(info, dict):
+                    # info is something like {'episode_steps': array([ 12,  34, ...]),
+                    #                        'min_distance': array([10.2,  5.6, ...]), ...}
+                    info_list = []
+                    for idx in range(num_envs):
+                        single = {}
+                        for key, val in info.items():
+                            # grab the i-th element of each array/list
+                            single[key] = val[idx]
+                        info_list.append(single)
+                else:
+                    info_list = info
                 for i in range(num_envs):
                     if not done[i]:
                         log_probs[i].append(log_prob[i].detach())
@@ -385,7 +444,8 @@ def train(
                         obs_list[i].append(obs_t[i])
                         actions[i].append(action[i])
                     if d[i] and infos[i] is None:
-                        infos[i] = info[i]
+                        # now pull from our per-env dict
+                        infos[i] = info_list[i]
                 done = np.logical_or(done, d)
                 obs = next_obs
                 step += 1
@@ -395,27 +455,33 @@ def train(
             log_list = []
             obs_stack = []
             action_stack = []
+            adv_list = []
             for i in range(num_envs):
-                G = 0.0
-                returns_i = []
-                for rr in reversed(rewards[i]):
-                    G = rr + gamma * G
-                    returns_i.insert(0, G)
-                ret_list.append(torch.tensor(returns_i, dtype=torch.float32, device=device))
-                val_list.append(torch.stack(values[i]))
+                vals_i = torch.stack(values[i])
+                rets_i, adv_i = compute_gae(
+                    rewards[i], vals_i, gamma=gamma, lam=0.95
+                )
+                ret_list.append(rets_i)
+                adv_list.append(adv_i)
+                val_list.append(vals_i)
                 log_list.append(torch.stack(log_probs[i]))
                 obs_stack.append(torch.stack(obs_list[i]))
                 action_stack.append(torch.stack(actions[i]))
             returns = torch.cat(ret_list)
             values_t = torch.cat(val_list)
-            advantages = returns - values_t
+            advantages = torch.cat(adv_list)
+            # Normalize advantages for more stable updates
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
             obs_batch = torch.cat(obs_stack)
             action_batch = torch.cat(action_stack)
             old_log_probs = torch.cat(log_list)
 
         for _ in range(ppo_epochs):
             mean, value = model(obs_batch)
-            dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+            std = model.std.expand_as(mean)
+            dist = torch.distributions.Normal(mean, std)
             log_probs_new = dist.log_prob(action_batch).sum(dim=1)
             entropy = dist.entropy().sum(dim=1)
             ratio = torch.exp(log_probs_new - old_log_probs)
@@ -433,6 +499,7 @@ def train(
 
         if writer:
             writer.add_scalar("train/loss", loss.item(), episode)
+            writer.add_scalar("train/entropy_coef", entropy_coef, episode)
 
         if num_envs == 1:
             print(f"Initial pursuer pos: {init_pursuer_pos}")
@@ -514,8 +581,14 @@ def train(
                         f"Advancing curriculum stage to {stage_idx}/{curriculum_stages}"
                     )
         if checkpoint_every and save_path and (episode + 1) % checkpoint_every == 0:
-            base, ext = os.path.splitext(save_path)
-            ckpt_path = f"{base}_ckpt_{episode+1}{ext}"
+            base_name, ext = os.path.splitext(os.path.basename(save_path))
+            ckpt_file = f"{base_name}_ckpt_{episode+1}{ext}"
+            if log_dir:
+                ckpt_dir = os.path.join(log_dir, "checkpoints")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                ckpt_path = os.path.join(ckpt_dir, ckpt_file)
+            else:
+                ckpt_path = os.path.join(os.path.dirname(save_path), ckpt_file)
             torch.save(model.state_dict(), ckpt_path)
             print(f"Checkpoint saved to {ckpt_path}")
 
@@ -601,7 +674,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-envs",
         type=int,
-        default=1,
+        default=8,
         help="number of parallel environments",
     )
     parser.add_argument(
@@ -620,10 +693,25 @@ if __name__ == "__main__":
         type=int,
         help="number of evals to average for adaptive curriculum",
     )
+    parser.add_argument("--gamma", type=float, help="discount factor")
+    parser.add_argument("--clip-ratio", type=float, help="PPO clipping ratio")
+    parser.add_argument(
+        "--ppo-epochs", type=int, help="number of optimisation epochs per batch"
+    )
     parser.add_argument(
         "--curriculum-stages",
         type=int,
-        help="number of discrete curriculum stages",
+        help="number of discrete curriculum stages including the final one",
+    )
+    parser.add_argument(
+        "--entropy-coef-start",
+        type=float,
+        help="initial entropy bonus weight",
+    )
+    parser.add_argument(
+        "--entropy-coef-end",
+        type=float,
+        help="final entropy bonus weight",
     )
     args = parser.parse_args()
 
@@ -642,7 +730,12 @@ if __name__ == "__main__":
             'curriculum_mode': 'linear',
             'curriculum_success_threshold': 0.8,
             'curriculum_window': 5,
-            'curriculum_stages': 5,
+            'curriculum_stages': 2,
+            'gamma': 0.99,
+            'clip_ratio': 0.2,
+            'ppo_epochs': 4,
+            'entropy_coef_start': 0.01,
+            'entropy_coef_end': 0.01,
         },
     )
     if args.episodes is not None:
@@ -671,8 +764,18 @@ if __name__ == "__main__":
         training_cfg['curriculum_success_threshold'] = args.success_threshold
     if args.curriculum_window is not None:
         training_cfg['curriculum_window'] = args.curriculum_window
+    if args.gamma is not None:
+        training_cfg['gamma'] = args.gamma
+    if args.clip_ratio is not None:
+        training_cfg['clip_ratio'] = args.clip_ratio
+    if args.ppo_epochs is not None:
+        training_cfg['ppo_epochs'] = args.ppo_epochs
     if args.curriculum_stages is not None:
         training_cfg['curriculum_stages'] = args.curriculum_stages
+    if args.entropy_coef_start is not None:
+        training_cfg['entropy_coef_start'] = args.entropy_coef_start
+    if args.entropy_coef_end is not None:
+        training_cfg['entropy_coef_end'] = args.entropy_coef_end
     if args.time_step is not None:
         config['time_step'] = args.time_step
 

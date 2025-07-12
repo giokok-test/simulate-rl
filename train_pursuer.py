@@ -103,7 +103,7 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
 class PursuerOnlyEnv(gym.Env):
     """Environment exposing only the pursuer. The evader follows ``evader_policy``."""
 
-    def __init__(self, cfg: dict, max_steps: int | None = None):
+    def __init__(self, cfg: dict, max_steps: int | None = None, capture_bonus: float = 0.0):
         super().__init__()
         # Full pursuit-evasion environment internally used
         self.env = PursuitEvasionEnv(cfg)
@@ -114,6 +114,7 @@ class PursuerOnlyEnv(gym.Env):
             self.max_steps = int(duration * 60.0 / cfg['time_step'])
         else:
             self.max_steps = max_steps
+        self.capture_bonus = capture_bonus
         self.cur_step = 0
 
     def reset(self, *, seed=None, options=None):
@@ -130,6 +131,10 @@ class PursuerOnlyEnv(gym.Env):
         e_action = evader_policy(self.env)
         obs, reward, done, truncated, info = self.env.step({'pursuer': action, 'evader': e_action})
         info.setdefault('start_distance', float(self.env.start_pe_dist))
+        r_p = float(reward['pursuer'])
+        if done and info.get('outcome') == 'capture':
+            steps = info.get('episode_steps', self.cur_step + 1)
+            r_p += self.capture_bonus * (self.max_steps - steps)
         self.cur_step += 1
         if self.cur_step >= self.max_steps and not done:
             done = True
@@ -141,7 +146,7 @@ class PursuerOnlyEnv(gym.Env):
             info.setdefault('evader_to_target', float(dist_target))
             info.setdefault('start_distance', float(self.env.start_pe_dist))
             info['outcome'] = 'timeout'
-        return obs['pursuer'].astype(np.float32), float(reward['pursuer']), done, truncated, info
+        return obs['pursuer'].astype(np.float32), r_p, done, truncated, info
 
 
 def evaluate(policy: PursuerPolicy, env: PursuerOnlyEnv, episodes: int = 5) -> tuple[float, float]:
@@ -218,6 +223,7 @@ def train(
     activation = training_cfg.get('activation', 'relu')
     reward_threshold = training_cfg.get('reward_threshold', 0.0)
     eval_freq = training_cfg.get('eval_freq', 10)
+    curriculum_stages = training_cfg.get('curriculum_stages', 2)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
     curriculum_cfg = training_cfg.get('curriculum')
@@ -258,6 +264,7 @@ def train(
     efficiency_logged = False
     success_history = deque(maxlen=success_window)
     stage_idx = 0
+    num_transitions = max(curriculum_stages - 1, 1)
     for episode in range(num_episodes):
         if curriculum_mode == 'adaptive':
             progress = stage_idx / max(curriculum_stages, 1)
@@ -269,7 +276,8 @@ def train(
                     progress,
                 )
         else:
-            progress = episode / max(num_episodes - 1, 1)
+            stage_idx = (episode * num_transitions) // max(num_episodes - 1, 1)
+            progress = stage_idx / num_transitions
             if start_cur and end_cur:
                 apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
         # Collect one episode of experience
@@ -392,8 +400,14 @@ def train(
                         f"Advancing curriculum stage to {stage_idx}/{curriculum_stages}"
                     )
         if checkpoint_every and save_path and (episode + 1) % checkpoint_every == 0:
-            base, ext = os.path.splitext(save_path)
-            ckpt_path = f"{base}_ckpt_{episode+1}{ext}"
+            base_name, ext = os.path.splitext(os.path.basename(save_path))
+            ckpt_file = f"{base_name}_ckpt_{episode+1}{ext}"
+            if log_dir:
+                ckpt_dir = os.path.join(log_dir, "checkpoints")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                ckpt_path = os.path.join(ckpt_dir, ckpt_file)
+            else:
+                ckpt_path = os.path.join(os.path.dirname(save_path), ckpt_file)
             torch.save(policy.state_dict(), ckpt_path)
             print(f"Checkpoint saved to {ckpt_path}")
 
@@ -501,7 +515,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--curriculum-stages",
         type=int,
-        help="number of discrete curriculum stages",
+        help="number of discrete curriculum stages including the final one",
     )
     args = parser.parse_args()
 
@@ -519,7 +533,7 @@ if __name__ == "__main__":
         'curriculum_mode': 'linear',
         'curriculum_success_threshold': 0.8,
         'curriculum_window': 5,
-        'curriculum_stages': 5,
+        'curriculum_stages': 2,
     })
     if args.episodes is not None:
         training_cfg['episodes'] = args.episodes

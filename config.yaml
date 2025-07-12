@@ -17,8 +17,6 @@ evader:
   yaw_rate: 5
   # Maximum pitch rotation rate [deg/s]
   pitch_rate: 10
-  # Initial force direction
-  up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [deg]
   stall_angle: 45.0
   # Preset trajectory mode. Use "dive" to level off until the dive angle
@@ -40,8 +38,6 @@ pursuer:
   yaw_rate: 20.0
   # Maximum pitch rotation rate [deg/s]
   pitch_rate: 25.0
-  # Initial force direction
-  up_vector: [0.0, 0.0, 1.0]
   # Maximum allowable pitch angle [deg]
   stall_angle: 55.0
 # Downward gravitational acceleration [m/s^2]
@@ -57,9 +53,15 @@ target_reward_distance: 100.0
 # Weight for shaping rewards
 shaping_weight: 0.05
 # Additional reward weight for simply getting closer to the evader each step
-closer_weight: 0.05
+closer_weight: 0.1
 # Additional reward weight for reducing the pursuer-to-evader angle
-angle_weight: 0.0
+angle_weight: 0.05
+# Additional reward weight for aligning the pursuer and evader headings
+heading_weight: 0.0
+# Extra reward multiplier for capturing before the time limit. The pursuer
+# receives ``1 + capture_bonus * (max_steps - episode_steps)`` when a capture
+# occurs, allowing earlier interceptions to yield higher returns.
+capture_bonus: 0.0
 # Coordinates of the evader's goal [m]
 target_position: [0, 0.0, 0.0]
 evader_start:
@@ -91,12 +93,12 @@ measurement_error_pct: 0.0
 # Factor multiplying the starting distance between the agents that
 # triggers episode termination when their separation exceeds this
 # multiple.
-separation_cutoff_factor: 2.0
+separation_cutoff_factor: 4.0
 
 # Training related options
 training:
   # Number of training episodes
-  episodes: 5000
+  episodes: 100000
   # Optimiser learning rate
   learning_rate: 0.001
   # L2 weight decay applied by the optimiser
@@ -104,7 +106,7 @@ training:
   # StepLR schedule - set step size to 0 to disable
   lr_step_size: 0
   # Multiplicative factor of learning rate decay
-  lr_gamma: 0.95
+  lr_gamma: 0.995
   # Width of hidden layers in the policy networks
   hidden_size: 64
   # Activation function: relu | tanh | leaky_relu
@@ -112,17 +114,19 @@ training:
   # Reward threshold for sample efficiency metric
   reward_threshold: 0.0
   # Run evaluation episodes every this many training episodes
-  eval_freq: 1000
+  eval_freq: 20000
   # Save a checkpoint every this many episodes. Set to 0 to disable.
-  checkpoint_steps: 0
+  checkpoint_steps: 2000
   # Curriculum progression mode: linear | adaptive
   curriculum_mode: linear
   # Rolling success threshold for adaptive curriculum
   curriculum_success_threshold: 0.8
   # Number of evaluation results to average for adaptive curriculum
   curriculum_window: 5
-  # Number of discrete curriculum stages
-  curriculum_stages: 5
+  # Number of discrete curriculum stages including the final environment.
+  # If set to ``N`` there will be ``N - 1`` transitions from ``curriculum.start``
+  # to ``curriculum.end`` over the course of training.
+  curriculum_stages: 2
   # Curriculum specifying how the starting conditions gradually expand
   # throughout training. The ``start`` dictionary defines the easiest
   # configuration while ``end`` corresponds to the final environment
@@ -132,9 +136,10 @@ training:
     start:
       evader_start:
         distance_range: [10000.0, 10000.0]
+        initial_speed: 0.0
       pursuer_start:
-        cone_half_angle: 0.0
-        inner_cone_half_angle: 0.0
+        cone_half_angle: 1.5708  
+        inner_cone_half_angle: 1.5708  
         min_range: 1000.0
         max_range: 1000.0
         yaw_range: [0.0, 0.0]
@@ -142,10 +147,11 @@ training:
     end:
       evader_start:
         distance_range: [8000.0, 12000.0]
+        initial_speed: 50.0
       pursuer_start:
         cone_half_angle: 1.5
         inner_cone_half_angle: 1.3
         min_range: 1000.0
         max_range: 5000.0
-        yaw_range: [-3.14159, 3.14159]
-        force_target_radius: 150.0
+        yaw_range: [-2, 2]
+        force_target_radius: 350.0

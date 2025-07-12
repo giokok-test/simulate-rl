@@ -99,9 +99,11 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
             if use_ppo:
                 mean, _ = model(obs_t)
+                std = model.std.expand_as(mean)
             else:
                 mean = model(obs_t)
-            dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = torch.ones_like(mean)
+            dist = torch.distributions.Normal(mean, std)
             action = dist.mean
         obs, r, done, _, info = env.step(action.cpu().numpy())
         pursuer_traj.append(env.env.pursuer_pos.copy())
