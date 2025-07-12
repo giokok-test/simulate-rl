@@ -159,6 +159,30 @@ class ActorCritic(nn.Module):
         return mean, value
 
 
+def compute_gae(
+    rewards: list[float] | torch.Tensor,
+    values: list[torch.Tensor] | torch.Tensor,
+    *,
+    gamma: float = 0.99,
+    lam: float = 0.95,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return discounted returns and advantages using GAE."""
+
+    if not torch.is_tensor(values):
+        values = torch.stack(list(values))
+    if not torch.is_tensor(rewards):
+        rewards = torch.tensor(rewards, dtype=torch.float32, device=values.device)
+    advantages = torch.zeros_like(rewards, device=values.device)
+    gae = 0.0
+    for t in reversed(range(len(rewards))):
+        next_value = values[t + 1] if t + 1 < len(values) else 0.0
+        delta = rewards[t] + gamma * next_value - values[t]
+        gae = delta + gamma * lam * gae
+        advantages[t] = gae
+    returns = advantages + values
+    return returns, advantages
+
+
 def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
     rewards = []
     successes = 0
@@ -326,14 +350,10 @@ def train(
                 obs = next_obs
                 step += 1
 
-            returns = []
-            G = 0.0
-            for r in reversed(rewards):
-                G = r + gamma * G
-                returns.insert(0, G)
-            returns = torch.tensor(returns, dtype=torch.float32, device=device)
             values_t = torch.stack(values)
-            advantages = returns - values_t
+            returns, advantages = compute_gae(
+                rewards, values_t, gamma=gamma, lam=0.95
+            )
 
             obs_batch = torch.stack(obs_list)
             action_batch = torch.stack(actions)
@@ -374,20 +394,21 @@ def train(
             log_list = []
             obs_stack = []
             action_stack = []
+            adv_list = []
             for i in range(num_envs):
-                G = 0.0
-                returns_i = []
-                for rr in reversed(rewards[i]):
-                    G = rr + gamma * G
-                    returns_i.insert(0, G)
-                ret_list.append(torch.tensor(returns_i, dtype=torch.float32, device=device))
-                val_list.append(torch.stack(values[i]))
+                vals_i = torch.stack(values[i])
+                rets_i, adv_i = compute_gae(
+                    rewards[i], vals_i, gamma=gamma, lam=0.95
+                )
+                ret_list.append(rets_i)
+                adv_list.append(adv_i)
+                val_list.append(vals_i)
                 log_list.append(torch.stack(log_probs[i]))
                 obs_stack.append(torch.stack(obs_list[i]))
                 action_stack.append(torch.stack(actions[i]))
             returns = torch.cat(ret_list)
             values_t = torch.cat(val_list)
-            advantages = returns - values_t
+            advantages = torch.cat(adv_list)
             obs_batch = torch.cat(obs_stack)
             action_batch = torch.cat(action_stack)
             old_log_probs = torch.cat(log_list)
