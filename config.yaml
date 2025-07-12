@@ -91,7 +91,7 @@ measurement_error_pct: 0.0
 # Factor multiplying the starting distance between the agents that
 # triggers episode termination when their separation exceeds this
 # multiple.
-separation_cutoff_factor: 4.0
+separation_cutoff_factor: 5.0
 
 # Training related options
 training:
