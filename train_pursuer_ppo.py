@@ -440,8 +440,14 @@ def train(
                     for idx in range(num_envs):
                         single = {}
                         for key, val in info.items():
-                            # grab the i-th element of each array/list
-                            single[key] = val[idx]
+                            # if val is array-like, index it; otherwise, copy directly
+                            if hasattr(val, "__len__") and not isinstance(val, dict):
+                                try:
+                                    single[key] = val[idx]
+                                except Exception:
+                                    single[key] = val         # fallback if indexing fails
+                            else:
+                                single[key] = val             # nested dicts, scalars, etc.
                         info_list.append(single)
                 else:
                     info_list = info
