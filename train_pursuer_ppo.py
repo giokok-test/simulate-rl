@@ -232,7 +232,7 @@ def train(
     checkpoint_every: int | None = None,
     resume_from: str | None = None,
     log_dir: str | None = None,
-    num_envs: int = 1,
+    num_envs: int = 8,
 ):
     """Train the pursuer policy using PPO.
 
@@ -275,7 +275,7 @@ def train(
         def _make() -> PursuerOnlyEnv:
             return PursuerOnlyEnv(cfg)
 
-        env = gym.vector.AsyncVectorEnv([_make for _ in range(num_envs)])
+        env = gym.vector.SyncVectorEnv([_make for _ in range(num_envs)])
         obs_space = env.single_observation_space
     else:
         env = PursuerOnlyEnv(cfg)
@@ -365,6 +365,7 @@ def train(
             values_t = torch.stack(values)
             returns, advantages = compute_gae(
                 rewards, values_t, gamma=gamma, lam=0.95
+            )
             # Normalize advantages for more stable updates
             advantages = (advantages - advantages.mean()) / (
                 advantages.std() + 1e-8
@@ -392,6 +393,18 @@ def train(
                 action = dist.sample()
                 log_prob = dist.log_prob(action).sum(dim=1)
                 next_obs, r, d, _, info = env.step(action.cpu().numpy())
+                if isinstance(info, dict):
+                    # info is something like {'episode_steps': array([ 12,  34, ...]),
+                    #                        'min_distance': array([10.2,  5.6, ...]), ...}
+                    info_list = []
+                    for idx in range(num_envs):
+                        single = {}
+                        for key, val in info.items():
+                            # grab the i-th element of each array/list
+                            single[key] = val[idx]
+                        info_list.append(single)
+                else:
+                    info_list = info
                 for i in range(num_envs):
                     if not done[i]:
                         log_probs[i].append(log_prob[i].detach())
@@ -400,7 +413,8 @@ def train(
                         obs_list[i].append(obs_t[i])
                         actions[i].append(action[i])
                     if d[i] and infos[i] is None:
-                        infos[i] = info[i]
+                        # now pull from our per-env dict
+                        infos[i] = info_list[i]
                 done = np.logical_or(done, d)
                 obs = next_obs
                 step += 1
@@ -601,7 +615,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-envs",
         type=int,
-        default=1,
+        default=8,
         help="number of parallel environments",
     )
     parser.add_argument("--gamma", type=float, help="discount factor")
