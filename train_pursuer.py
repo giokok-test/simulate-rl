@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import gymnasium as gym
 from typing import Optional
-from collections import defaultdict
+from collections import defaultdict, deque
 import yaml
 
 TABLE_HEADER = (
@@ -249,6 +249,9 @@ def train(
     eval_freq = training_cfg.get('eval_freq', 10)
     curriculum_stages = training_cfg.get('curriculum_stages', 2)
     outcome_window = training_cfg.get('outcome_window', 100)
+    curriculum_mode = training_cfg.get('curriculum_mode', 'linear')
+    success_threshold = training_cfg.get('success_threshold', 0.8)
+    curriculum_window = training_cfg.get('curriculum_window', 50)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
     curriculum_cfg = training_cfg.get('curriculum')
@@ -288,10 +291,13 @@ def train(
     outcome_counts = defaultdict(int)
     # ``curriculum_stages`` counts the discrete phases from the starting
     # configuration to the final one. There are ``curriculum_stages - 1``
-    # transitions, and ``stage_idx`` selects the active stage.
+    # transitions. ``stage_idx`` selects the active stage.
     num_transitions = max(curriculum_stages - 1, 1)
+    stage_idx = 0
+    recent = deque(maxlen=curriculum_window)
     for episode in range(num_episodes):
-        stage_idx = (episode * num_transitions) // max(num_episodes - 1, 1)
+        if curriculum_mode == 'linear':
+            stage_idx = (episode * num_transitions) // max(num_episodes - 1, 1)
         progress = stage_idx / num_transitions
         if start_cur and end_cur:
             apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
@@ -372,6 +378,15 @@ def train(
         if info:
             outcome = info.get("outcome", "timeout")
             outcome_counts[outcome] += 1
+            if curriculum_mode == 'adaptive':
+                recent.append(1 if outcome == 'capture' else 0)
+                if (
+                    len(recent) >= curriculum_window
+                    and sum(recent) / len(recent) >= success_threshold
+                    and stage_idx < num_transitions
+                ):
+                    stage_idx += 1
+                    recent.clear()
             if (episode + 1) % outcome_window == 0 and writer:
                 total = sum(outcome_counts.values())
                 for k, c in outcome_counts.items():
@@ -493,6 +508,22 @@ if __name__ == "__main__":
         help="number of discrete curriculum stages including the final one",
     )
     parser.add_argument(
+        "--curriculum-mode",
+        type=str,
+        choices=["linear", "adaptive"],
+        help="curriculum progression mode",
+    )
+    parser.add_argument(
+        "--success-threshold",
+        type=float,
+        help="success rate required to advance the curriculum",
+    )
+    parser.add_argument(
+        "--curriculum-window",
+        type=int,
+        help="episodes used to compute adaptive success rate",
+    )
+    parser.add_argument(
         "--outcome-window",
         type=int,
         help="episodes per bin for termination statistics",
@@ -521,6 +552,9 @@ if __name__ == "__main__":
         'reward_threshold': 0.0,
         'eval_freq': 1000,
         'checkpoint_steps': 0,
+        'curriculum_mode': 'linear',
+        'success_threshold': 0.8,
+        'curriculum_window': 50,
         'curriculum_stages': 2,
         'outcome_window': 100,
     })
@@ -544,6 +578,12 @@ if __name__ == "__main__":
         training_cfg['eval_freq'] = args.eval_freq
     if args.checkpoint_every is not None:
         training_cfg['checkpoint_steps'] = args.checkpoint_every
+    if args.curriculum_mode is not None:
+        training_cfg['curriculum_mode'] = args.curriculum_mode
+    if args.success_threshold is not None:
+        training_cfg['success_threshold'] = args.success_threshold
+    if args.curriculum_window is not None:
+        training_cfg['curriculum_window'] = args.curriculum_window
     if args.curriculum_stages is not None:
         training_cfg['curriculum_stages'] = args.curriculum_stages
     if args.outcome_window is not None:
