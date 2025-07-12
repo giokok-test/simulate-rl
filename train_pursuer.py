@@ -222,6 +222,7 @@ def train(
     activation = training_cfg.get('activation', 'relu')
     reward_threshold = training_cfg.get('reward_threshold', 0.0)
     eval_freq = training_cfg.get('eval_freq', 10)
+    curriculum_stages = training_cfg.get('curriculum_stages', 2)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
     curriculum_cfg = training_cfg.get('curriculum')
@@ -256,8 +257,13 @@ def train(
     )
 
     efficiency_logged = False
+    # ``curriculum_stages`` counts the discrete phases from the starting
+    # configuration to the final one. There are ``curriculum_stages - 1``
+    # transitions, and ``stage_idx`` selects the active stage.
+    num_transitions = max(curriculum_stages - 1, 1)
     for episode in range(num_episodes):
-        progress = episode / max(num_episodes - 1, 1)
+        stage_idx = (episode * num_transitions) // max(num_episodes - 1, 1)
+        progress = stage_idx / num_transitions
         if start_cur and end_cur:
             apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
         # Collect one episode of experience
@@ -438,6 +444,11 @@ if __name__ == "__main__":
         help="save a checkpoint every N episodes",
     )
     parser.add_argument(
+        "--curriculum-stages",
+        type=int,
+        help="number of discrete curriculum stages including the final one",
+    )
+    parser.add_argument(
         "--resume-from",
         type=str,
         help="start training from this checkpoint file",
@@ -461,6 +472,7 @@ if __name__ == "__main__":
         'reward_threshold': 0.0,
         'eval_freq': 1000,
         'checkpoint_steps': 0,
+        'curriculum_stages': 2,
     })
     if args.episodes is not None:
         training_cfg['episodes'] = args.episodes
@@ -482,6 +494,8 @@ if __name__ == "__main__":
         training_cfg['eval_freq'] = args.eval_freq
     if args.checkpoint_every is not None:
         training_cfg['checkpoint_steps'] = args.checkpoint_every
+    if args.curriculum_stages is not None:
+        training_cfg['curriculum_stages'] = args.curriculum_stages
     if args.time_step is not None:
         config['time_step'] = args.time_step
 
