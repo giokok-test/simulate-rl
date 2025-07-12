@@ -102,7 +102,7 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
 class PursuerOnlyEnv(gym.Env):
     """Environment exposing only the pursuer."""
 
-    def __init__(self, cfg: dict, max_steps: int | None = None):
+    def __init__(self, cfg: dict, max_steps: int | None = None, capture_bonus: float = 0.0):
         super().__init__()
         self.env = PursuitEvasionEnv(cfg)
         self.observation_space = self.env.observation_space['pursuer']
@@ -112,6 +112,7 @@ class PursuerOnlyEnv(gym.Env):
             self.max_steps = int(duration * 60.0 / cfg['time_step'])
         else:
             self.max_steps = max_steps
+        self.capture_bonus = capture_bonus
         self.cur_step = 0
 
     def reset(self, *, seed=None, options=None):
@@ -126,6 +127,10 @@ class PursuerOnlyEnv(gym.Env):
             {'pursuer': action, 'evader': e_action}
         )
         info.setdefault('start_distance', float(self.env.start_pe_dist))
+        r_p = float(reward['pursuer'])
+        if done and info.get('outcome') == 'capture':
+            steps = info.get('episode_steps', self.cur_step + 1)
+            r_p += self.capture_bonus * (self.max_steps - steps)
         self.cur_step += 1
         if self.cur_step >= self.max_steps and not done:
             done = True
@@ -137,7 +142,7 @@ class PursuerOnlyEnv(gym.Env):
             info.setdefault('evader_to_target', float(dist_target))
             info.setdefault('start_distance', float(self.env.start_pe_dist))
             info['outcome'] = 'timeout'
-        return obs['pursuer'].astype(np.float32), float(reward['pursuer']), done, truncated, info
+        return obs['pursuer'].astype(np.float32), r_p, done, truncated, info
 
 
 class ActorCritic(nn.Module):

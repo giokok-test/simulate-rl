@@ -181,6 +181,10 @@ The reward shaping parameters `shaping_weight`, `closer_weight` and
 behaviour. The `separation_cutoff_factor` option defines a multiplier of
 the initial pursuer--evader distance that ends the episode when the
 agents drift farther apart than this threshold.
+The `capture_bonus` setting adds a time incentive for the pursuer by
+increasing its terminal reward when a capture occurs earlier. The final
+reward becomes `1 + capture_bonus * (max_steps - episode_steps)` where
+`max_steps` is the episode length limit.
 
 The `evader.awareness_mode` option defines how much information the
 evader receives about the pursuer:
