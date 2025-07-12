@@ -126,8 +126,8 @@ training:
         distance_range: [10000.0, 10000.0]
         initial_speed: 0.0
       pursuer_start:
-        cone_half_angle: 0.0
-        inner_cone_half_angle: 0.0
+        cone_half_angle: 1.5708  
+        inner_cone_half_angle: 1.5708  
         min_range: 1000.0
         max_range: 1000.0
         yaw_range: [0.0, 0.0]
