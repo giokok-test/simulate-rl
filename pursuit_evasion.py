@@ -278,6 +278,9 @@ class PursuitEvasionEnv(gym.Env):
     def step(self, action: dict):
         """Update the environment one time step.
 
+        A small time penalty of ``-0.001`` is applied to the pursuer's
+        reward on every step to encourage faster capture.
+
         Parameters
         ----------
         action : dict
@@ -293,6 +296,8 @@ class PursuitEvasionEnv(gym.Env):
         dist_pe = np.linalg.norm(self.evader_pos - self.pursuer_pos)
         target = np.array(self.cfg['target_position'], dtype=np.float32)
         dist_target = np.linalg.norm(self.evader_pos - target)
+        dist_target_xy = np.linalg.norm((self.evader_pos - target)[:2])
+        success_thresh = self.cfg.get('target_success_distance', 100.0)
         self.min_pe_dist = min(self.min_pe_dist, dist_pe)
         shape_p = self.prev_pe_dist - dist_pe
         shape_e = self.prev_target_dist - dist_target
@@ -318,6 +323,8 @@ class PursuitEvasionEnv(gym.Env):
         r_p += self.shaping_weight * shape_p
         r_p += closer_bonus
         r_p += angle_bonus
+        # small time penalty encouraging quick capture
+        r_p -= 0.001
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
         info = {}
@@ -331,6 +338,8 @@ class PursuitEvasionEnv(gym.Env):
             }
             if dist_pe <= self.cfg['capture_radius']:
                 info['outcome'] = 'capture'
+            elif dist_target_xy <= success_thresh and self.evader_pos[2] > 0.0:
+                info['outcome'] = 'evader_success'
             elif self.evader_pos[2] < 0.0:
                 info['outcome'] = 'evader_ground'
             elif self.pursuer_pos[2] < 0.0:
@@ -453,13 +462,22 @@ class PursuitEvasionEnv(gym.Env):
         return pos_obs.astype(np.float32), vel_obs.astype(np.float32)
 
     def _check_done(self):
-        """Determine if the episode has terminated."""
+        """Determine if the episode has terminated.
+
+        Episodes end on capture, excessive separation, either agent touching
+        the ground or the evader reaching the vicinity of its target while
+        still airborne.
+        """
         dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
         target = np.array(self.cfg['target_position'], dtype=np.float32)
         dist_target = np.linalg.norm(self.evader_pos - target)
+        dist_target_xy = np.linalg.norm((self.evader_pos - target)[:2])
+        success_thresh = self.cfg.get('target_success_distance', 100.0)
 
         if dist <= self.cfg['capture_radius']:
             return True, -1.0, 1.0
+        if dist_target_xy <= success_thresh and self.evader_pos[2] > 0.0:
+            return True, 1.0, 0.0
         if dist >= self.cutoff_factor * self.start_pe_dist:
             return True, 0.0, 0.0
 

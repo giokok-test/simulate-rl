@@ -64,6 +64,8 @@ tensorboard --logdir runs
 ```
 
 This will show episode rewards, evaluation results and losses during training.
+When a log directory is set, periodic checkpoints created with
+``--checkpoint-every`` are stored under ``<log-dir>/checkpoints``.
 
 ### New training options
 
@@ -100,6 +102,7 @@ The command line options are the same as for ``train_pursuer.py`` and the
 trained weights are written to ``pursuer_ppo.pt`` unless ``--save-path`` is
 specified. Both training scripts also support ``--checkpoint-every`` to save
 periodic checkpoints and ``--resume-from`` to continue from a saved model.
+If ``--log-dir`` is supplied these checkpoints are placed in ``<log-dir>/checkpoints``.
 The PPO trainer additionally accepts ``--num-envs`` to run several
 environment instances in parallel which can significantly speed up data
 collection on multi-core machines.
@@ -113,7 +116,8 @@ interpolated over the course of training. Any numeric field under these
 dictionaries will be linearly scaled from the `start` value to the `end`
 value as episodes progress. For example, the default configuration narrows
 the pursuer's `yaw_range` and initial `force_target_radius` to begin the
-agent immediately behind the evader before expanding to the full search
+agent immediately behind the evader while increasing `evader_start.initial_speed`
+from 0&nbsp;m/s to 50&nbsp;m/s before expanding to the full search
 area. The curriculum makes it possible to smoothly transition from simple
 encounters to more challenging ones.
 
@@ -146,7 +150,7 @@ which is useful for quickly checking that the environment works.
 The environment stores several statistics for each episode. When an episode
 finishes the ``info`` dictionary returned from ``env.step`` contains the
 closest pursuer--evader distance, number of steps and outcome (capture,
-evader reaching the target, separation exceeding a multiple of the starting distance (controlled by `separation_cutoff_factor` in `config.yaml`) or timeout). The evaluation helpers in the training
+evader reaching the target while airborne, separation exceeding a multiple of the starting distance (controlled by `separation_cutoff_factor` in `config.yaml`) or timeout). The evaluation helpers in the training
 scripts print the average minimum distance and episode length during
 periodic evaluations.
 
@@ -178,6 +182,10 @@ The reward shaping parameters `shaping_weight`, `closer_weight` and
 behaviour. The `separation_cutoff_factor` option defines a multiplier of
 the initial pursuer--evader distance that ends the episode when the
 agents drift farther apart than this threshold.
+The `capture_bonus` setting adds a time incentive for the pursuer by
+increasing its terminal reward when a capture occurs earlier. The final
+reward becomes `1 + capture_bonus * (max_steps - episode_steps)` where
+`max_steps` is the episode length limit.
 
 The `evader.awareness_mode` option defines how much information the
 evader receives about the pursuer:
@@ -209,7 +217,9 @@ When either agent touches the ground the episode terminates. If the evader
 hits the ground its terminal reward scales with the distance to the target
 using ``target_reward_distance``. A reward of one is given when it reaches the
 goal and it falls off to zero once the evader is roughly 100&nbsp;m away by
-default.
+default. Episodes also end successfully when the airborne evader comes within
+100&nbsp;m of the goal. The radius for this check can be adjusted via the
+``target_success_distance`` setting.
 
 ## Sensor error model
 

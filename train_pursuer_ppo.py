@@ -102,7 +102,7 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
 class PursuerOnlyEnv(gym.Env):
     """Environment exposing only the pursuer."""
 
-    def __init__(self, cfg: dict, max_steps: int | None = None):
+    def __init__(self, cfg: dict, max_steps: int | None = None, capture_bonus: float = 0.0):
         super().__init__()
         self.env = PursuitEvasionEnv(cfg)
         self.observation_space = self.env.observation_space['pursuer']
@@ -112,6 +112,7 @@ class PursuerOnlyEnv(gym.Env):
             self.max_steps = int(duration * 60.0 / cfg['time_step'])
         else:
             self.max_steps = max_steps
+        self.capture_bonus = capture_bonus
         self.cur_step = 0
 
     def reset(self, *, seed=None, options=None):
@@ -126,6 +127,10 @@ class PursuerOnlyEnv(gym.Env):
             {'pursuer': action, 'evader': e_action}
         )
         info.setdefault('start_distance', float(self.env.start_pe_dist))
+        r_p = float(reward['pursuer'])
+        if done and info.get('outcome') == 'capture':
+            steps = info.get('episode_steps', self.cur_step + 1)
+            r_p += self.capture_bonus * (self.max_steps - steps)
         self.cur_step += 1
         if self.cur_step >= self.max_steps and not done:
             done = True
@@ -137,7 +142,7 @@ class PursuerOnlyEnv(gym.Env):
             info.setdefault('evader_to_target', float(dist_target))
             info.setdefault('start_distance', float(self.env.start_pe_dist))
             info['outcome'] = 'timeout'
-        return obs['pursuer'].astype(np.float32), float(reward['pursuer']), done, truncated, info
+        return obs['pursuer'].astype(np.float32), r_p, done, truncated, info
 
 
 class ActorCritic(nn.Module):
@@ -468,8 +473,14 @@ def train(
                     writer.add_scalar("sweep/episodes_to_reward", episode + 1, 0)
                     efficiency_logged = True
         if checkpoint_every and save_path and (episode + 1) % checkpoint_every == 0:
-            base, ext = os.path.splitext(save_path)
-            ckpt_path = f"{base}_ckpt_{episode+1}{ext}"
+            base_name, ext = os.path.splitext(os.path.basename(save_path))
+            ckpt_file = f"{base_name}_ckpt_{episode+1}{ext}"
+            if log_dir:
+                ckpt_dir = os.path.join(log_dir, "checkpoints")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                ckpt_path = os.path.join(ckpt_dir, ckpt_file)
+            else:
+                ckpt_path = os.path.join(os.path.dirname(save_path), ckpt_file)
             torch.save(model.state_dict(), ckpt_path)
             print(f"Checkpoint saved to {ckpt_path}")
 
