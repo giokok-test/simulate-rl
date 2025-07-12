@@ -167,6 +167,8 @@ class PursuitEvasionEnv(gym.Env):
         self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
         # maximum allowed separation before the episode ends
         self.cutoff_factor = self.cfg.get('separation_cutoff_factor', 2.0)
+        # penalty applied when the pursuer crashes into the ground
+        self.ground_penalty = self.cfg.get('pursuer_ground_penalty', -1.0)
         # Convert stall angles provided in degrees to radians once
         self.cfg['evader']['stall_angle'] = np.deg2rad(
             self.cfg['evader']['stall_angle']
@@ -501,7 +503,7 @@ class PursuitEvasionEnv(gym.Env):
 
         # episode ends if either agent goes below ground level
         if self.pursuer_pos[2] < 0.0:
-            return True, 0.0, -1.0
+            return True, 0.0, float(self.ground_penalty)
         if self.evader_pos[2] < 0.0:
             max_d = self.cfg.get('target_reward_distance', 100.0)
             reward = max(0.0, 1.0 - (dist_target / max_d) ** 2)

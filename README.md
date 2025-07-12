@@ -251,6 +251,8 @@ goal and it falls off to zero once the evader is roughly 100&nbsp;m away by
 default. Episodes also end successfully when the airborne evader comes within
 100&nbsp;m of the goal. The radius for this check can be adjusted via the
 ``target_success_distance`` setting.
+If the pursuer crashes into the ground it receives a negative reward
+configured by ``pursuer_ground_penalty``.
 
 ## Sensor error model
 
