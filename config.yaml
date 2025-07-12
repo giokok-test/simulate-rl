@@ -61,7 +61,9 @@ heading_weight: 0.05
 # Extra reward multiplier for capturing before the time limit. The pursuer
 # receives ``1 + capture_bonus * (max_steps - episode_steps)`` when a capture
 # occurs, allowing earlier interceptions to yield higher returns.
-capture_bonus: 10.0
+capture_bonus: 0.0
+# Penalty applied when the pursuer crashes into the ground
+pursuer_ground_penalty: -1.0
 # Coordinates of the evader's goal [m]
 target_position: [0, 0.0, 0.0]
 evader_start:
@@ -115,6 +117,8 @@ training:
   reward_threshold: 0.0
   # Run evaluation episodes every this many training episodes
   eval_freq: 20000
+  # Episodes per bin for termination statistics
+  outcome_window: 100
   # Save a checkpoint every this many episodes. Set to 0 to disable.
   checkpoint_steps: 2000
   # Number of discrete curriculum stages including the final environment.
