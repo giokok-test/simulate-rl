@@ -207,8 +207,9 @@ the section based spawning.  Combined with the `min_range` and
 the beginning of an episode.
 Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
 at runtime, so changes take effect the next time you run the scripts.
-The reward shaping parameters `shaping_weight`, `closer_weight` and
-`angle_weight` can be adjusted here as well to encourage desired
+The reward shaping parameters `shaping_weight`, `closer_weight`,
+`angle_weight` and `heading_weight` can be adjusted here as well to
+encourage desired
 behaviour. The `separation_cutoff_factor` option defines a multiplier of
 the initial pursuer--evader distance that ends the episode when the
 agents drift farther apart than this threshold.
