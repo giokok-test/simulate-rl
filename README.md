@@ -124,7 +124,29 @@ the pursuer's `yaw_range` and initial `force_target_radius` to begin the
 agent immediately behind the evader while increasing `evader_start.initial_speed`
 from 0&nbsp;m/s to 50&nbsp;m/s before expanding to the full search
 area. The curriculum makes it possible to smoothly transition from simple
-encounters to more challenging ones.
+encounters to more challenging ones. The length of the success history
+used by the adaptive curriculum is controlled with ``curriculum_window``
+while ``curriculum_stages`` defines how many intermediate steps exist
+between the ``start`` and ``end`` configuration.
+
+The following command line arguments tune the curriculum behaviour:
+
+- ``--curriculum-mode`` – ``linear`` linearly interpolates from ``start`` to
+  ``end`` while ``adaptive`` only advances when the success threshold is
+  met.
+- ``--success-threshold`` – fraction of recent episodes that must succeed
+  before moving to the next curriculum stage.
+- ``--curriculum-window`` – number of episodes used to compute the adaptive
+  success rate.
+- ``--curriculum-stages`` – number of curriculum increments between
+  ``start`` and ``end``.
+
+For example, to train with the adaptive curriculum enabled:
+
+```bash
+python train_pursuer.py --curriculum-mode adaptive --success-threshold 0.8 \
+    --curriculum-window 50 --curriculum-stages 5
+```
 
 ## Additional scripts
 
