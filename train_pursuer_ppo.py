@@ -152,11 +152,19 @@ class ActorCritic(nn.Module):
         super().__init__()
         self.policy_net = _make_mlp(obs_dim, 3, hidden_size, activation)
         self.value_net = _make_mlp(obs_dim, 1, hidden_size, activation)
+        # Log standard deviation for the Gaussian policy. Using ``zeros``
+        # initialisation mirrors the previous unit variance behaviour.
+        self.log_std = nn.Parameter(torch.zeros(3))
 
     def forward(self, obs: torch.Tensor):
         mean = self.policy_net(obs)
         value = self.value_net(obs).squeeze(-1)
         return mean, value
+
+    @property
+    def std(self) -> torch.Tensor:
+        """Return the action standard deviation."""
+        return self.log_std.exp()
 
 
 def compute_gae(
@@ -197,7 +205,8 @@ def evaluate(model: ActorCritic, env: PursuerOnlyEnv, episodes: int = 5):
             with torch.no_grad():
                 obs_t = torch.tensor(obs, device=next(model.parameters()).device)
                 mean, _ = model(obs_t)
-                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = model.std.expand_as(mean)
+                dist = torch.distributions.Normal(mean, std)
                 action = dist.mean
             obs, r, done, _, info = env.step(action.cpu().numpy())
             total += r
@@ -333,7 +342,8 @@ def train(
             while not done:
                 obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
                 mean, value = model(obs_t)
-                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = model.std.expand_as(mean)
+                dist = torch.distributions.Normal(mean, std)
                 action = dist.sample()
                 log_prob = dist.log_prob(action).sum()
                 next_obs, r, done, _, info = env.step(action.cpu().numpy())
@@ -377,7 +387,8 @@ def train(
             while not np.all(done):
                 obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
                 mean, value = model(obs_t)
-                dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+                std = model.std.expand_as(mean)
+                dist = torch.distributions.Normal(mean, std)
                 action = dist.sample()
                 log_prob = dist.log_prob(action).sum(dim=1)
                 next_obs, r, d, _, info = env.step(action.cpu().numpy())
@@ -424,7 +435,8 @@ def train(
 
         for _ in range(ppo_epochs):
             mean, value = model(obs_batch)
-            dist = torch.distributions.Normal(mean, torch.ones_like(mean))
+            std = model.std.expand_as(mean)
+            dist = torch.distributions.Normal(mean, std)
             log_probs_new = dist.log_prob(action_batch).sum(dim=1)
             entropy = dist.entropy().sum(dim=1)
             ratio = torch.exp(log_probs_new - old_log_probs)
