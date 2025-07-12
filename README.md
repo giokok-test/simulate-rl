@@ -105,7 +105,12 @@ periodic checkpoints and ``--resume-from`` to continue from a saved model.
 If ``--log-dir`` is supplied these checkpoints are placed in ``<log-dir>/checkpoints``.
 The PPO trainer additionally accepts ``--num-envs`` to run several
 environment instances in parallel which can significantly speed up data
-collection on multi-core machines.
+collection on multi-core machines. All algorithm parameters
+(``gamma``, ``clip_ratio``, ``ppo_epochs`` and the entropy bonus weight)
+live in the ``training`` section of ``config.yaml`` and may be overridden
+via command line flags. The entropy bonus coefficient decays linearly
+from ``entropy_coef_start`` to ``entropy_coef_end`` over the course of
+training.
 
 ### Curriculum training
 

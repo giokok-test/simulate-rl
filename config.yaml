@@ -119,6 +119,16 @@ training:
   eval_freq: 1000
   # Save a checkpoint every this many episodes. Set to 0 to disable.
   checkpoint_steps: 0
+  # Discount factor for return calculations
+  gamma: 0.99
+  # PPO clipping ratio
+  clip_ratio: 0.2
+  # Number of optimisation passes over each batch
+  ppo_epochs: 4
+  # Entropy bonus coefficient. The value decays linearly from
+  # ``entropy_coef_start`` to ``entropy_coef_end`` over training.
+  entropy_coef_start: 0.01
+  entropy_coef_end: 0.01
   # Curriculum specifying how the starting conditions gradually expand
   # throughout training. The ``start`` dictionary defines the easiest
   # configuration while ``end`` corresponds to the final environment

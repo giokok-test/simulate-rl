@@ -289,10 +289,11 @@ def train(
         else None
     )
 
-    gamma = 0.99
-    clip_ratio = 0.2
-    ppo_epochs = 4
-    entropy_coef = 0.01
+    gamma = training_cfg.get('gamma', 0.99)
+    clip_ratio = training_cfg.get('clip_ratio', 0.2)
+    ppo_epochs = training_cfg.get('ppo_epochs', 4)
+    entropy_start = training_cfg.get('entropy_coef_start', 0.01)
+    entropy_end = training_cfg.get('entropy_coef_end', entropy_start)
 
     header = (
         f"{'step':>5} | {'pursuer→evader [m]':>26} | "
@@ -305,6 +306,7 @@ def train(
 
     for episode in range(num_episodes):
         progress = episode / max(num_episodes - 1, 1)
+        entropy_coef = entropy_start + (entropy_end - entropy_start) * progress
         if start_cur and end_cur:
             if num_envs == 1:
                 apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
@@ -353,6 +355,9 @@ def train(
             values_t = torch.stack(values)
             returns, advantages = compute_gae(
                 rewards, values_t, gamma=gamma, lam=0.95
+            # Normalize advantages for more stable updates
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
             )
 
             obs_batch = torch.stack(obs_list)
@@ -409,6 +414,10 @@ def train(
             returns = torch.cat(ret_list)
             values_t = torch.cat(val_list)
             advantages = torch.cat(adv_list)
+            # Normalize advantages for more stable updates
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
             obs_batch = torch.cat(obs_stack)
             action_batch = torch.cat(action_stack)
             old_log_probs = torch.cat(log_list)
@@ -433,6 +442,7 @@ def train(
 
         if writer:
             writer.add_scalar("train/loss", loss.item(), episode)
+            writer.add_scalar("train/entropy_coef", entropy_coef, episode)
 
         if num_envs == 1:
             print(f"Initial pursuer pos: {init_pursuer_pos}")
@@ -582,6 +592,21 @@ if __name__ == "__main__":
         default=1,
         help="number of parallel environments",
     )
+    parser.add_argument("--gamma", type=float, help="discount factor")
+    parser.add_argument("--clip-ratio", type=float, help="PPO clipping ratio")
+    parser.add_argument(
+        "--ppo-epochs", type=int, help="number of optimisation epochs per batch"
+    )
+    parser.add_argument(
+        "--entropy-coef-start",
+        type=float,
+        help="initial entropy bonus weight",
+    )
+    parser.add_argument(
+        "--entropy-coef-end",
+        type=float,
+        help="final entropy bonus weight",
+    )
     args = parser.parse_args()
 
     training_cfg = config.setdefault(
@@ -596,6 +621,11 @@ if __name__ == "__main__":
             'reward_threshold': 0.0,
             'eval_freq': 1000,
             'checkpoint_steps': 0,
+            'gamma': 0.99,
+            'clip_ratio': 0.2,
+            'ppo_epochs': 4,
+            'entropy_coef_start': 0.01,
+            'entropy_coef_end': 0.01,
         },
     )
     if args.episodes is not None:
@@ -618,6 +648,16 @@ if __name__ == "__main__":
         training_cfg['eval_freq'] = args.eval_freq
     if args.checkpoint_every is not None:
         training_cfg['checkpoint_steps'] = args.checkpoint_every
+    if args.gamma is not None:
+        training_cfg['gamma'] = args.gamma
+    if args.clip_ratio is not None:
+        training_cfg['clip_ratio'] = args.clip_ratio
+    if args.ppo_epochs is not None:
+        training_cfg['ppo_epochs'] = args.ppo_epochs
+    if args.entropy_coef_start is not None:
+        training_cfg['entropy_coef_start'] = args.entropy_coef_start
+    if args.entropy_coef_end is not None:
+        training_cfg['entropy_coef_end'] = args.entropy_coef_end
     if args.time_step is not None:
         config['time_step'] = args.time_step
 
