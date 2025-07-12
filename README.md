@@ -149,7 +149,7 @@ which is useful for quickly checking that the environment works.
 The environment stores several statistics for each episode. When an episode
 finishes the ``info`` dictionary returned from ``env.step`` contains the
 closest pursuer--evader distance, number of steps and outcome (capture,
-evader reaching the target, separation exceeding a multiple of the starting distance (controlled by `separation_cutoff_factor` in `config.yaml`) or timeout). The evaluation helpers in the training
+evader reaching the target while airborne, separation exceeding a multiple of the starting distance (controlled by `separation_cutoff_factor` in `config.yaml`) or timeout). The evaluation helpers in the training
 scripts print the average minimum distance and episode length during
 periodic evaluations.
 
@@ -216,7 +216,9 @@ When either agent touches the ground the episode terminates. If the evader
 hits the ground its terminal reward scales with the distance to the target
 using ``target_reward_distance``. A reward of one is given when it reaches the
 goal and it falls off to zero once the evader is roughly 100&nbsp;m away by
-default.
+default. Episodes also end successfully when the airborne evader comes within
+100&nbsp;m of the goal. The radius for this check can be adjusted via the
+``target_success_distance`` setting.
 
 ## Sensor error model
 
