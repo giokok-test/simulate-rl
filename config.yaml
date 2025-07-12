@@ -18,12 +18,12 @@ evader:
   # Maximum pitch rotation rate [deg/s]
   pitch_rate: 10
   # Maximum allowable pitch angle [deg]
-  stall_angle: 45.0
+  stall_angle: 75
   # Preset trajectory mode. Use "dive" to level off until the dive angle
   # threshold is reached
-  trajectory: direct
+  trajectory: dive
   # Angle to the target at which the evader begins its dive [deg]
-  dive_angle: 20.0
+  dive_angle: 70
 pursuer:
   # Mass of the pursuer [kg]
   mass: 100.0
@@ -47,21 +47,21 @@ time_step: 0.1
 # Duration of one episode [min]
 episode_duration: 40
 # Distance at which capture is considered successful [m]
-capture_radius: 1.0
+capture_radius: 3.0
 # Distance within which the evader receives reward when hitting the ground [m]
 target_reward_distance: 100.0
 # Weight for shaping rewards
-shaping_weight: 0.05
+shaping_weight: 0.1
 # Additional reward weight for simply getting closer to the evader each step
 closer_weight: 0.1
 # Additional reward weight for reducing the pursuer-to-evader angle
 angle_weight: 0.05
 # Additional reward weight for aligning the pursuer and evader headings
-heading_weight: 0.0
+heading_weight: 0.05
 # Extra reward multiplier for capturing before the time limit. The pursuer
 # receives ``1 + capture_bonus * (max_steps - episode_steps)`` when a capture
 # occurs, allowing earlier interceptions to yield higher returns.
-capture_bonus: 0.0
+capture_bonus: 10.0
 # Coordinates of the evader's goal [m]
 target_position: [0, 0.0, 0.0]
 evader_start:
@@ -120,7 +120,7 @@ training:
   # Number of discrete curriculum stages including the final environment.
   # If set to ``N`` there will be ``N - 1`` transitions from ``curriculum.start``
   # to ``curriculum.end`` over the course of training.
-  curriculum_stages: 2
+  curriculum_stages: 10
   # Curriculum specifying how the starting conditions gradually expand
   # throughout training. The ``start`` dictionary defines the easiest
   # configuration while ``end`` corresponds to the final environment
