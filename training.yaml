@@ -1,7 +1,7 @@
 # Training related options
 training:
   # Number of training episodes
-  episodes: 100000
+  episodes: 300000
   # Optimiser learning rate
   learning_rate: 0.001
   # L2 weight decay applied by the optimiser
@@ -25,7 +25,7 @@ training:
   # Number of discrete curriculum stages including the final environment.
   # If set to ``N`` there will be ``N - 1`` transitions from ``curriculum.start``
   # to ``curriculum.end`` over the course of training.
-  curriculum_stages: 2
+  curriculum_stages: 20
   # Curriculum specifying how the starting conditions gradually expand
   # throughout training. The ``start`` dictionary defines the easiest
   # configuration while ``end`` corresponds to the final environment

@@ -18,9 +18,9 @@ evader:
   # Maximum pitch rotation rate [deg/s]
   pitch_rate: 10
   # Maximum allowable pitch angle [deg]
-  stall_angle: 45.0
+  stall_angle: 75.0
   # Preset trajectory mode. Use "dive" to level off until the dive angle
   # threshold is reached
-  trajectory: direct
+  trajectory: dive
   # Angle to the target at which the evader begins its dive [deg]
-  dive_angle: 20.0
+  dive_angle: 70.0
