@@ -66,6 +66,12 @@ tensorboard --logdir runs
 This will show episode rewards, evaluation results and losses during training.
 When a log directory is set, periodic checkpoints created with
 ``--checkpoint-every`` are stored under ``<log-dir>/checkpoints``.
+The logs also record a breakdown of the pursuer reward into shaping,
+alignment and terminal components as well as the fractions of each
+termination type aggregated over ``training.outcome_window`` episodes.
+When curriculum training is enabled the current angular and distance
+ranges are written under the ``curriculum/`` namespace so the schedule
+can be visualised over time.
 
 ### New training options
 

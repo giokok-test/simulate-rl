@@ -275,6 +275,15 @@ class PursuitEvasionEnv(gym.Env):
         self.start_pe_dist = self.prev_pe_dist
         target = np.array(self.cfg['target_position'], dtype=np.float32)
         self.prev_target_dist = np.linalg.norm(self.evader_pos - target)
+        # reset reward component totals
+        self._reward_breakdown = {
+            'terminal': 0.0,
+            'shaping': 0.0,
+            'closer': 0.0,
+            'angle': 0.0,
+            'heading': 0.0,
+            'time': 0.0,
+        }
         # metrics for episode statistics
         self.min_pe_dist = self.prev_pe_dist
         self.cur_step = 0
@@ -335,14 +344,23 @@ class PursuitEvasionEnv(gym.Env):
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
 
-        done, r_e, r_p = self._check_done()
+        done, r_e, r_p_terminal = self._check_done()
+        shaping_reward = self.shaping_weight * shape_p
         r_e += self.shaping_weight * shape_e
-        r_p += self.shaping_weight * shape_p
-        r_p += closer_bonus
-        r_p += angle_bonus
-        r_p += heading_bonus
-        # small time penalty encouraging quick capture
-        r_p -= 0.001
+        r_p = (
+            r_p_terminal
+            + shaping_reward
+            + closer_bonus
+            + angle_bonus
+            + heading_bonus
+            - 0.001
+        )
+        self._reward_breakdown['terminal'] += r_p_terminal
+        self._reward_breakdown['shaping'] += shaping_reward
+        self._reward_breakdown['closer'] += closer_bonus
+        self._reward_breakdown['angle'] += angle_bonus
+        self._reward_breakdown['heading'] += heading_bonus
+        self._reward_breakdown['time'] += -0.001
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
         info = {}
@@ -364,6 +382,9 @@ class PursuitEvasionEnv(gym.Env):
                 info['outcome'] = 'pursuer_ground'
             elif dist_pe >= self.cutoff_factor * self.start_pe_dist:
                 info['outcome'] = 'separation_exceeded'
+            info['reward_breakdown'] = {
+                k: float(v) for k, v in self._reward_breakdown.items()
+            }
 
         self.cur_step += 1
         return obs, reward, done, False, info
