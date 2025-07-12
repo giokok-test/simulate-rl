@@ -60,6 +60,10 @@ shaping_weight: 0.05
 closer_weight: 0.05
 # Additional reward weight for reducing the pursuer-to-evader angle
 angle_weight: 0.0
+# Extra reward multiplier for capturing before the time limit. The pursuer
+# receives ``1 + capture_bonus * (max_steps - episode_steps)`` when a capture
+# occurs, allowing earlier interceptions to yield higher returns.
+capture_bonus: 0.0
 # Coordinates of the evader's goal [m]
 target_position: [0, 0.0, 0.0]
 evader_start:
