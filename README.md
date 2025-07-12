@@ -119,12 +119,37 @@ difficulty of each episode. The `training.curriculum` section in
 `config.yaml` contains `start` and `end` dictionaries with values that are
 interpolated over the course of training. Any numeric field under these
 dictionaries will be linearly scaled from the `start` value to the `end`
-value as episodes progress. For example, the default configuration narrows
+value. The `training.curriculum_stages` option specifies how many discrete
+stages are used, with ``N`` meaning ``N - 1`` transitions from the start to
+the end configuration. Progress within a stage is computed as
+``stage_idx / max(curriculum_stages - 1, 1)``. For example, the default configuration narrows
 the pursuer's `yaw_range` and initial `force_target_radius` to begin the
 agent immediately behind the evader while increasing `evader_start.initial_speed`
 from 0&nbsp;m/s to 50&nbsp;m/s before expanding to the full search
 area. The curriculum makes it possible to smoothly transition from simple
-encounters to more challenging ones.
+encounters to more challenging ones. The length of the success history
+used by the adaptive curriculum is controlled with ``curriculum_window``
+while ``curriculum_stages`` defines how many intermediate steps exist
+between the ``start`` and ``end`` configuration.
+
+The following command line arguments tune the curriculum behaviour:
+
+- ``--curriculum-mode`` – ``linear`` linearly interpolates from ``start`` to
+  ``end`` while ``adaptive`` only advances when the success threshold is
+  met.
+- ``--success-threshold`` – fraction of recent episodes that must succeed
+  before moving to the next curriculum stage.
+- ``--curriculum-window`` – number of episodes used to compute the adaptive
+  success rate.
+- ``--curriculum-stages`` – number of curriculum increments between
+  ``start`` and ``end``.
+
+For example, to train with the adaptive curriculum enabled:
+
+```bash
+python train_pursuer.py --curriculum-mode adaptive --success-threshold 0.8 \
+    --curriculum-window 50 --curriculum-stages 5
+```
 
 ## Additional scripts
 
@@ -182,8 +207,9 @@ the section based spawning.  Combined with the `min_range` and
 the beginning of an episode.
 Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
 at runtime, so changes take effect the next time you run the scripts.
-The reward shaping parameters `shaping_weight`, `closer_weight` and
-`angle_weight` can be adjusted here as well to encourage desired
+The reward shaping parameters `shaping_weight`, `closer_weight`,
+`angle_weight` and `heading_weight` can be adjusted here as well to
+encourage desired
 behaviour. The `separation_cutoff_factor` option defines a multiplier of
 the initial pursuer--evader distance that ends the episode when the
 agents drift farther apart than this threshold.

@@ -161,6 +161,9 @@ class PursuitEvasionEnv(gym.Env):
         # Reward for reducing the angle between the pursuer's force direction
         # and the line of sight to the evader from one step to the next.
         self.angle_weight = self.cfg.get('angle_weight', 0.0)
+        # Reward for reducing the difference between the pursuer and
+        # evader headings from one step to the next.
+        self.heading_weight = self.cfg.get('heading_weight', 0.0)
         self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
         # maximum allowed separation before the episode ends
         self.cutoff_factor = self.cfg.get('separation_cutoff_factor', 2.0)
@@ -264,6 +267,10 @@ class PursuitEvasionEnv(gym.Env):
         self.prev_pe_dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
         vec_pe = self.evader_pos - self.pursuer_pos
         self.prev_pe_angle = self._angle_between(self.pursuer_force_dir, vec_pe)
+        # heading difference between the agents for shaping
+        h_e = self.evader_vel / (np.linalg.norm(self.evader_vel) + 1e-8)
+        h_p = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
+        self.prev_heading_angle = self._angle_between(h_p, h_e)
         # store the starting distance for logging
         self.start_pe_dist = self.prev_pe_dist
         target = np.array(self.cfg['target_position'], dtype=np.float32)
@@ -315,6 +322,16 @@ class PursuitEvasionEnv(gym.Env):
         if self.angle_weight > 0.0 and angle < self.prev_pe_angle:
             angle_bonus = self.angle_weight * (self.prev_pe_angle - angle)
         self.prev_pe_angle = angle
+        # Reward for aligning the pursuer and evader headings
+        h_e = self.evader_vel / (np.linalg.norm(self.evader_vel) + 1e-8)
+        h_p = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
+        head_ang = self._angle_between(h_p, h_e)
+        heading_bonus = 0.0
+        if self.heading_weight > 0.0 and head_ang < self.prev_heading_angle:
+            heading_bonus = self.heading_weight * (
+                self.prev_heading_angle - head_ang
+            )
+        self.prev_heading_angle = head_ang
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
 
@@ -323,6 +340,7 @@ class PursuitEvasionEnv(gym.Env):
         r_p += self.shaping_weight * shape_p
         r_p += closer_bonus
         r_p += angle_bonus
+        r_p += heading_bonus
         # small time penalty encouraging quick capture
         r_p -= 0.001
         obs = self._get_obs()
