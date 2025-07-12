@@ -278,6 +278,9 @@ class PursuitEvasionEnv(gym.Env):
     def step(self, action: dict):
         """Update the environment one time step.
 
+        A small time penalty of ``-0.001`` is applied to the pursuer's
+        reward on every step to encourage faster capture.
+
         Parameters
         ----------
         action : dict
@@ -318,6 +321,8 @@ class PursuitEvasionEnv(gym.Env):
         r_p += self.shaping_weight * shape_p
         r_p += closer_bonus
         r_p += angle_bonus
+        # small time penalty encouraging quick capture
+        r_p -= 0.001
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
         info = {}
