@@ -77,6 +77,10 @@ termination type aggregated over ``training.outcome_window`` episodes.
 When curriculum training is enabled the current angular and distance
 ranges are written under the ``curriculum/`` namespace so the schedule
 can be visualised over time.
+When running PPO with multiple environments the logger now reports the
+mean minimum pursuer--evader distance and episode length across all
+environments.  A summary of how many episodes ended in each termination
+state is printed every iteration for easier monitoring.
 
 ### New training options
 

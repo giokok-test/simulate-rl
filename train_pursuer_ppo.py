@@ -568,21 +568,33 @@ def train(
                     print(row)
         else:
             episode_reward = sum(sum(r) for r in rewards) / num_envs
+            episode_outcomes = defaultdict(int)
             if writer:
                 writer.add_scalar("train/episode_reward", episode_reward, episode)
                 rb_sum = defaultdict(float)
                 n_info = 0
+                min_list = []
+                len_list = []
                 for inf in infos:
                     if inf:
                         n_info += 1
                         for k, v in inf.get("reward_breakdown", {}).items():
                             rb_sum[k] += v
-                        outcome_counts[inf.get("outcome", "timeout")] += 1
+                        outcome = inf.get("outcome", "timeout")
+                        outcome_counts[outcome] += 1
+                        episode_outcomes[outcome] += 1
+                        if "min_distance" in inf:
+                            min_list.append(inf["min_distance"])
+                        if "episode_steps" in inf:
+                            len_list.append(inf["episode_steps"])
                 if n_info:
                     for k, v in rb_sum.items():
-                        # Ensure we pass a Python float (0-dim tensor) to add_scalar
                         scalar_reward = float((v / n_info).mean())
                         writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
+                    if min_list:
+                        writer.add_scalar("train/min_distance", float(np.mean(min_list)), episode)
+                    if len_list:
+                        writer.add_scalar("train/episode_length", float(np.mean(len_list)), episode)
                 if (episode + 1) % outcome_window == 0:
                     total = sum(outcome_counts.values())
                     for k, c in outcome_counts.items():
@@ -590,6 +602,8 @@ def train(
                             f"termination/{k}", c / total, episode
                         )
                     outcome_counts = defaultdict(int)
+            if episode_outcomes:
+                print(f"Episode {episode+1}: outcomes={dict(episode_outcomes)} reward={episode_reward:.2f}")
 
         if (episode + 1) % eval_freq == 0:
             eval_cfg = copy.deepcopy(cfg)
