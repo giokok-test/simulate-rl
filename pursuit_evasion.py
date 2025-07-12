@@ -501,7 +501,8 @@ class PursuitEvasionEnv(gym.Env):
 
         # episode ends if either agent goes below ground level
         if self.pursuer_pos[2] < 0.0:
-            return True, 0.0, -1.0
+            penalty = self.cfg.get('pursuer_ground_penalty', -1.0)
+            return True, 0.0, penalty
         if self.evader_pos[2] < 0.0:
             max_d = self.cfg.get('target_reward_distance', 100.0)
             reward = max(0.0, 1.0 - (dist_target / max_d) ** 2)
