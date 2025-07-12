@@ -74,6 +74,12 @@ When a log directory is set, periodic checkpoints created with
 The logs also record a breakdown of the pursuer reward into shaping,
 alignment and terminal components as well as the fractions of each
 termination type aggregated over ``training.outcome_window`` episodes.
+When running multiple environments in parallel the average minimum
+distance to the evader and mean episode length are logged under
+``train/min_distance`` and ``train/episode_length``.
+Every ``training.outcome_window`` episodes the script also prints the
+number of occurrences of each termination reason so you can quickly see
+how episodes are ending.
 When curriculum training is enabled the current angular and distance
 ranges are written under the ``curriculum/`` namespace so the schedule
 can be visualised over time.
@@ -194,10 +200,13 @@ which is useful for quickly checking that the environment works.
 
 The environment stores several statistics for each episode. When an episode
 finishes the ``info`` dictionary returned from ``env.step`` contains the
-closest pursuer--evader distance, number of steps and outcome (capture,
-evader reaching the target while airborne, separation exceeding a multiple of the starting distance (controlled by ``separation_cutoff_factor`` in ``env.yaml``) or timeout). The evaluation helpers in the training
-scripts print the average minimum distance and episode length during
-periodic evaluations.
+closest pursuer--evader distance, number of steps and outcome. The outcome can
+be ``capture`` (pursuer success), ``evader_success`` (reaches the target in the
+air), ``evader_ground`` or ``pursuer_ground`` when a crash occurs,
+``separation_exceeded`` if the starting distance has grown beyond the
+``separation_cutoff_factor`` multiple, or ``timeout`` when the step limit is
+reached. The evaluation helpers in the training scripts print the average
+minimum distance and episode length during periodic evaluations.
 
 ## Adjusting environment parameters
 
