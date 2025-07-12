@@ -77,6 +77,9 @@ termination type aggregated over ``training.outcome_window`` episodes.
 When running multiple environments in parallel the average minimum
 distance to the evader and mean episode length are logged under
 ``train/min_distance`` and ``train/episode_length``.
+The ratio between the closest approach and the initial pursuer--evader
+distance is stored as ``train/min_start_ratio`` to help gauge how much
+closer the pursuer gets relative to the spawn distance.
 Every ``training.outcome_window`` episodes the script also prints the
 number of occurrences of each termination reason so you can quickly see
 how episodes are ending.
@@ -211,6 +214,9 @@ air), ``evader_ground`` or ``pursuer_ground`` when a crash occurs,
 ``separation_cutoff_factor`` multiple, or ``timeout`` when the step limit is
 reached. The evaluation helpers in the training scripts print the average
 minimum distance and episode length during periodic evaluations.
+The logged ``min_start_ratio`` metric records how close the pursuer got
+relative to where it spawned (minimum distance divided by the starting
+separation).
 
 ## Adjusting environment parameters
 
