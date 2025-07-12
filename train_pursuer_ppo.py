@@ -334,6 +334,10 @@ def train(
             returns = torch.tensor(returns, dtype=torch.float32, device=device)
             values_t = torch.stack(values)
             advantages = returns - values_t
+            # Normalize advantages for more stable updates
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
 
             obs_batch = torch.stack(obs_list)
             action_batch = torch.stack(actions)
@@ -388,6 +392,10 @@ def train(
             returns = torch.cat(ret_list)
             values_t = torch.cat(val_list)
             advantages = returns - values_t
+            # Normalize advantages for more stable updates
+            advantages = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )
             obs_batch = torch.cat(obs_stack)
             action_batch = torch.cat(action_stack)
             old_log_probs = torch.cat(log_list)
