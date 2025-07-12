@@ -117,6 +117,8 @@ training:
   reward_threshold: 0.0
   # Run evaluation episodes every this many training episodes
   eval_freq: 20000
+  # Episodes per bin for termination statistics
+  outcome_window: 100
   # Save a checkpoint every this many episodes. Set to 0 to disable.
   checkpoint_steps: 2000
   # Number of discrete curriculum stages including the final environment.

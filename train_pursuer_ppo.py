@@ -11,6 +11,8 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import gymnasium as gym
 from typing import Optional
+from collections import defaultdict
+import yaml
 
 TABLE_HEADER = (
     f"{'step':>5} | {'pursuer→evader [m]':>26} | "
@@ -51,6 +53,29 @@ from pursuit_evasion import (
 # Load configuration and fix the evader policy
 config = load_config()
 config['evader']['awareness_mode'] = 1
+
+
+def _log_curriculum(writer: SummaryWriter, cfg: dict, start: dict, end: dict, step: int, prefix: str = "") -> None:
+    for key, s_val in start.items():
+        if key not in end or key not in cfg:
+            continue
+        e_val = end[key]
+        cur = cfg[key]
+        if isinstance(s_val, dict) and isinstance(e_val, dict):
+            _log_curriculum(writer, cur, s_val, e_val, step, prefix + key + "/")
+        elif isinstance(s_val, (int, float)) and isinstance(e_val, (int, float)):
+            if s_val != e_val:
+                writer.add_scalar(f"curriculum/{prefix}{key}", cur, step)
+        elif (
+            isinstance(s_val, (list, tuple))
+            and isinstance(e_val, (list, tuple))
+            and len(s_val) == len(e_val)
+        ):
+            for i, (sv, ev, cv) in enumerate(zip(s_val, e_val, cur)):
+                if sv != ev:
+                    writer.add_scalar(
+                        f"curriculum/{prefix}{key}_{i}", cv, step
+                    )
 
 
 def _format_step(env: PursuerOnlyEnv, step: int, target: np.ndarray) -> str:
@@ -265,6 +290,7 @@ def train(
     reward_threshold = training_cfg.get('reward_threshold', 0.0)
     eval_freq = training_cfg.get('eval_freq', 10)
     curriculum_stages = training_cfg.get('curriculum_stages', 2)
+    outcome_window = training_cfg.get('outcome_window', 100)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
     curriculum_cfg = training_cfg.get('curriculum')
@@ -286,6 +312,8 @@ def train(
         obs_space.shape[0], hidden_size=hidden_size, activation=activation
     ).to(device)
     writer = SummaryWriter(log_dir=log_dir) if log_dir else None
+    if writer:
+        writer.add_text("config/full", yaml.dump(cfg), 0)
     if resume_from:
         state_dict = torch.load(resume_from, map_location=device)
         model.load_state_dict(state_dict)
@@ -313,6 +341,7 @@ def train(
     )
 
     efficiency_logged = False
+    outcome_counts = defaultdict(int)
     # ``curriculum_stages`` counts the discrete phases from the starting
     # configuration to the final one. There are ``curriculum_stages - 1``
     # transitions, and ``stage_idx`` selects the active stage.
@@ -326,9 +355,13 @@ def train(
         if start_cur and end_cur:
             if num_envs == 1:
                 apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
+                if writer:
+                    _log_curriculum(writer, env.env.cfg, start_cur, end_cur, episode)
             else:
                 for e in env.envs:
                     apply_curriculum(e.env.cfg, start_cur, end_cur, progress)
+                if writer:
+                    _log_curriculum(writer, env.envs[0].env.cfg, start_cur, end_cur, episode)
         if num_envs == 1:
             obs, _ = env.reset()
             init_pursuer_pos = env.env.pursuer_pos.copy()
@@ -500,10 +533,22 @@ def train(
                         info.get("episode_steps", step),
                         episode,
                     )
+                    rb = info.get("reward_breakdown", {})
+                    for k, v in rb.items():
+                        writer.add_scalar(f"train/reward_{k}", v, episode)
             if info:
+                outcome = info.get('outcome', 'timeout')
+                outcome_counts[outcome] += 1
+                if (episode + 1) % outcome_window == 0 and writer:
+                    total = sum(outcome_counts.values())
+                    for k, c in outcome_counts.items():
+                        writer.add_scalar(
+                            f"termination/{k}", c / total, episode
+                        )
+                    outcome_counts = defaultdict(int)
                 print(
                     f"Episode {episode+1}: reward={episode_reward:.2f} "
-                    f"outcome={info.get('outcome', 'timeout')} start={start_d:.2f} "
+                    f"outcome={outcome} start={start_d:.2f} "
                     f"min={info.get('min_distance', float('nan')):.2f}"
                 )
                 print(TABLE_HEADER)
@@ -517,6 +562,24 @@ def train(
             episode_reward = sum(sum(r) for r in rewards) / num_envs
             if writer:
                 writer.add_scalar("train/episode_reward", episode_reward, episode)
+                rb_sum = defaultdict(float)
+                n_info = 0
+                for inf in infos:
+                    if inf:
+                        n_info += 1
+                        for k, v in inf.get("reward_breakdown", {}).items():
+                            rb_sum[k] += v
+                        outcome_counts[inf.get("outcome", "timeout")] += 1
+                if n_info:
+                    for k, v in rb_sum.items():
+                        writer.add_scalar(f"train/reward_{k}", v / n_info, episode)
+                if (episode + 1) % outcome_window == 0:
+                    total = sum(outcome_counts.values())
+                    for k, c in outcome_counts.items():
+                        writer.add_scalar(
+                            f"termination/{k}", c / total, episode
+                        )
+                    outcome_counts = defaultdict(int)
 
         if (episode + 1) % eval_freq == 0:
             eval_cfg = copy.deepcopy(cfg)
@@ -636,6 +699,11 @@ if __name__ == "__main__":
         help="number of discrete curriculum stages including the final one",
     )
     parser.add_argument(
+        "--outcome-window",
+        type=int,
+        help="episodes per bin for termination statistics",
+    )
+    parser.add_argument(
         "--entropy-coef-start",
         type=float,
         help="initial entropy bonus weight",
@@ -665,6 +733,7 @@ if __name__ == "__main__":
             'ppo_epochs': 4,
             'entropy_coef_start': 0.01,
             'entropy_coef_end': 0.01,
+            'outcome_window': 100,
         },
     )
     if args.episodes is not None:
@@ -695,6 +764,8 @@ if __name__ == "__main__":
         training_cfg['ppo_epochs'] = args.ppo_epochs
     if args.curriculum_stages is not None:
         training_cfg['curriculum_stages'] = args.curriculum_stages
+    if args.outcome_window is not None:
+        training_cfg['outcome_window'] = args.outcome_window
     if args.entropy_coef_start is not None:
         training_cfg['entropy_coef_start'] = args.entropy_coef_start
     if args.entropy_coef_end is not None:
