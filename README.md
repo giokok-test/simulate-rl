@@ -119,7 +119,10 @@ difficulty of each episode. The `training.curriculum` section in
 `config.yaml` contains `start` and `end` dictionaries with values that are
 interpolated over the course of training. Any numeric field under these
 dictionaries will be linearly scaled from the `start` value to the `end`
-value as episodes progress. For example, the default configuration narrows
+value. The `training.curriculum_stages` option specifies how many discrete
+stages are used, with ``N`` meaning ``N - 1`` transitions from the start to
+the end configuration. Progress within a stage is computed as
+``stage_idx / max(curriculum_stages - 1, 1)``. For example, the default configuration narrows
 the pursuer's `yaw_range` and initial `force_target_radius` to begin the
 agent immediately behind the evader while increasing `evader_start.initial_speed`
 from 0&nbsp;m/s to 50&nbsp;m/s before expanding to the full search

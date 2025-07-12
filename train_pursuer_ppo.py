@@ -264,6 +264,7 @@ def train(
     activation = training_cfg.get('activation', 'relu')
     reward_threshold = training_cfg.get('reward_threshold', 0.0)
     eval_freq = training_cfg.get('eval_freq', 10)
+    curriculum_stages = training_cfg.get('curriculum_stages', 2)
     if checkpoint_every is None:
         checkpoint_every = training_cfg.get('checkpoint_steps')
     curriculum_cfg = training_cfg.get('curriculum')
@@ -312,10 +313,16 @@ def train(
     )
 
     efficiency_logged = False
+    # ``curriculum_stages`` counts the discrete phases from the starting
+    # configuration to the final one. There are ``curriculum_stages - 1``
+    # transitions, and ``stage_idx`` selects the active stage.
+    num_transitions = max(curriculum_stages - 1, 1)
 
     for episode in range(num_episodes):
-        progress = episode / max(num_episodes - 1, 1)
-        entropy_coef = entropy_start + (entropy_end - entropy_start) * progress
+        stage_idx = (episode * num_transitions) // max(num_episodes - 1, 1)
+        progress = stage_idx / num_transitions
+        episode_progress = episode / max(num_episodes - 1, 1)
+        entropy_coef = entropy_start + (entropy_end - entropy_start) * episode_progress
         if start_cur and end_cur:
             if num_envs == 1:
                 apply_curriculum(env.env.cfg, start_cur, end_cur, progress)
@@ -624,6 +631,11 @@ if __name__ == "__main__":
         "--ppo-epochs", type=int, help="number of optimisation epochs per batch"
     )
     parser.add_argument(
+        "--curriculum-stages",
+        type=int,
+        help="number of discrete curriculum stages including the final one",
+    )
+    parser.add_argument(
         "--entropy-coef-start",
         type=float,
         help="initial entropy bonus weight",
@@ -647,6 +659,7 @@ if __name__ == "__main__":
             'reward_threshold': 0.0,
             'eval_freq': 1000,
             'checkpoint_steps': 0,
+            'curriculum_stages': 2,
             'gamma': 0.99,
             'clip_ratio': 0.2,
             'ppo_epochs': 4,
@@ -680,6 +693,8 @@ if __name__ == "__main__":
         training_cfg['clip_ratio'] = args.clip_ratio
     if args.ppo_epochs is not None:
         training_cfg['ppo_epochs'] = args.ppo_epochs
+    if args.curriculum_stages is not None:
+        training_cfg['curriculum_stages'] = args.curriculum_stages
     if args.entropy_coef_start is not None:
         training_cfg['entropy_coef_start'] = args.entropy_coef_start
     if args.entropy_coef_end is not None:
