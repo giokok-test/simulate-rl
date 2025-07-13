@@ -2,8 +2,8 @@
 
 This repository contains a very small demonstration of a 3D pursuit--evasion
 environment written using `gymnasium`. Two agents (an evader and a pursuer)
-move in a simplified physics world. The provided scripts allow training a
-pursuer policy with a basic REINFORCE loop.
+move in a simplified physics world. The provided script trains a pursuer policy
+using Proximal Policy Optimization (PPO).
 
 ## Environment setup
 
@@ -30,13 +30,13 @@ scripts.
 
 ## Running the first training
 
-The `train_pursuer.py` script trains a small neural network policy for the
+The `train_pursuer_ppo.py` script trains a small neural network policy for the
 pursuer while the evader follows a scripted behaviour. To start training run:
 
 ```bash
-python train_pursuer.py
+python train_pursuer_ppo.py
 ```
-The script saves the trained policy to `pursuer_policy.pt` by default. You can
+The script saves the trained policy to `pursuer_ppo.pt` by default. You can
 override this with `--save-path`.
 
 The script accepts a few command line options to control the training. For
@@ -44,7 +44,7 @@ instance, to run 200 episodes with a smaller learning rate and evaluation every
 20 episodes while saving checkpoints every 50 episodes:
 
 ```bash
-python train_pursuer.py --episodes 200 --lr 5e-4 --eval-freq 20 --checkpoint-every 50
+python train_pursuer_ppo.py --episodes 200 --lr 5e-4 --eval-freq 20 --checkpoint-every 50
 ```
 
 The defaults for these options live in ``training.yaml`` and can be
@@ -57,11 +57,11 @@ is measured against the target difficulty.
 
 ### Monitoring training with TensorBoard
 
-Both training scripts can write metrics for visualization with TensorBoard.
+The training script can write metrics for visualization with TensorBoard.
 Pass ``--log-dir`` to specify where logs should be stored. For example:
 
 ```bash
-python train_pursuer.py --log-dir runs/reinforce
+python train_pursuer_ppo.py --log-dir runs/ppo
 ```
 
 Start TensorBoard with
@@ -95,12 +95,12 @@ state is printed every iteration for easier monitoring.
 
 ### New training options
 
-Both training scripts now support additional parameters for
+The training script supports additional parameters for
 weight decay, learning rate scheduling and model size. These can be set via the
 configuration in ``training.yaml`` or from the command line:
 
 ```bash
-python train_pursuer.py --weight-decay 1e-4 --lr-step-size 500 --lr-gamma 0.9 \
+python train_pursuer_ppo.py --weight-decay 1e-4 --lr-step-size 500 --lr-gamma 0.9 \
     --hidden-size 128 --activation tanh
 ```
 
@@ -115,32 +115,29 @@ hyperparameters and logs each run to its own TensorBoard directory. The sweep
 script also records the number of episodes required to reach a configurable
 average reward threshold via the `sweep/episodes_to_reward` metric.
 
-### PPO variant
+### PPO training
 
-For a more stable actor--critic approach, run the ``train_pursuer_ppo.py``
-script which implements a minimal Proximal Policy Optimization loop with an
-entropy bonus:
+The ``train_pursuer_ppo.py`` script implements a minimal Proximal Policy
+Optimization loop with an entropy bonus:
 
 ```bash
 python train_pursuer_ppo.py
 ```
-The command line options are the same as for ``train_pursuer.py`` and the
-trained weights are written to ``pursuer_ppo.pt`` unless ``--save-path`` is
-specified. Both training scripts also support ``--checkpoint-every`` to save
-periodic checkpoints and ``--resume-from`` to continue from a saved model.
-If ``--log-dir`` is supplied these checkpoints are placed in ``<log-dir>/checkpoints``.
-The PPO trainer additionally accepts ``--num-envs`` to run several
-environment instances in parallel which can significantly speed up data
-collection on multi-core machines. All algorithm parameters
-(``gamma``, ``clip_ratio``, ``ppo_epochs`` and the entropy bonus weight)
-are stored in ``training.yaml`` and may be overridden
-via command line flags. The entropy bonus coefficient decays linearly
-from ``entropy_coef_start`` to ``entropy_coef_end`` over the course of
+The trained weights are written to ``pursuer_ppo.pt`` unless ``--save-path`` is
+specified. The script also supports ``--checkpoint-every`` to save periodic
+checkpoints and ``--resume-from`` to continue from a saved model. If
+``--log-dir`` is supplied these checkpoints are placed in ``<log-dir>/checkpoints``.
+The trainer additionally accepts ``--num-envs`` to run several environment
+instances in parallel which can significantly speed up data collection on
+multi-core machines. All algorithm parameters (``gamma``, ``clip_ratio``,
+``ppo_epochs`` and the entropy bonus weight) are stored in ``training.yaml`` and
+may be overridden via command line flags. The entropy bonus coefficient decays
+linearly from ``entropy_coef_start`` to ``entropy_coef_end`` over the course of
 training.
 
 ### Curriculum training
 
-Both training scripts optionally support gradually increasing the starting
+The training script optionally supports gradually increasing the starting
 difficulty of each episode. The ``training.curriculum`` section in
 ``training.yaml`` contains ``start`` and ``end`` dictionaries with values that are
 interpolated over the course of training. Any numeric field under these
@@ -164,8 +161,7 @@ used by the adaptive curriculum is controlled with ``curriculum_window``
 while ``curriculum_stages`` defines how many intermediate steps exist
 between the ``start`` and ``end`` configuration.
 
-The following command line arguments, accepted by both ``train_pursuer.py``
-and ``train_pursuer_ppo.py``, tune the curriculum behaviour:
+The following command line arguments tune the curriculum behaviour:
 
 - ``--curriculum-mode`` – ``linear`` progresses through the curriculum at a
   fixed rate while ``adaptive`` only advances when the success threshold is
@@ -177,15 +173,12 @@ and ``train_pursuer_ppo.py``, tune the curriculum behaviour:
 - ``--curriculum-stages`` – number of curriculum increments between
   ``start`` and ``end``.
 
-For example, to train with the adaptive curriculum enabled using the
-REINFORCE trainer:
+For example, to train with the adaptive curriculum enabled:
 
 ```bash
-python train_pursuer.py --curriculum-mode adaptive --success-threshold 0.8 \
+python train_pursuer_ppo.py --curriculum-mode adaptive --success-threshold 0.8 \
     --curriculum-window 50 --curriculum-stages 5
 ```
-The same flags may be passed to ``train_pursuer_ppo.py`` to enable the
-adaptive curriculum when using PPO.
 
 ## Additional scripts
 
@@ -198,8 +191,8 @@ python pursuit_evasion.py
 
 which is useful for quickly checking that the environment works.
 
-- `play.py` loads a saved policy and runs a single episode. Use the `--ppo`
-  flag when loading a model trained with the PPO script. Episodes run for the
+- `play.py` loads a saved policy and runs a single episode using the PPO
+  policy. Episodes run for the
   duration specified by `episode_duration` in ``env.yaml`` unless `--steps` is
   used to override the maximum number of simulation steps.
   The plot now highlights the starting and final positions of both agents,
@@ -256,8 +249,8 @@ The initial speed of the pursuer is drawn uniformly from
 `pursuer_start.initial_speed_range`, which can also be modified via the
 training curriculum to gradually narrow or expand the spawn speed
 interval.
-Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
-at runtime, so changes take effect the next time you run the scripts.
+Both `pursuit_evasion.py` and `train_pursuer_ppo.py` load the configuration
+at runtime, so changes take effect the next time you run the script.
 The reward shaping parameters `shaping_weight`, `closer_weight`,
 `angle_weight` and `heading_weight` can be adjusted here as well to
 encourage desired

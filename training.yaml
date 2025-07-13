@@ -35,7 +35,13 @@ training:
   # Number of discrete curriculum stages including the final environment.
   # If set to ``N`` there will be ``N - 1`` transitions from ``curriculum.start``
   # to ``curriculum.end`` over the course of training.
-  curriculum_stages: 120
+  curriculum_stages: 20
+  # PPO algorithm parameters
+  gamma: 0.99
+  clip_ratio: 0.2
+  ppo_epochs: 4
+  entropy_coef_start: 0.01
+  entropy_coef_end: 0.01
   # Curriculum specifying how the starting conditions gradually expand
   # throughout training. The ``start`` dictionary defines the easiest
   # configuration while ``end`` corresponds to the final environment
