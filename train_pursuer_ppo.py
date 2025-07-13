@@ -44,7 +44,6 @@ def _format_row(step: int, env: PursuitEvasionEnv) -> str:
 
 from pursuit_evasion import (
     PursuitEvasionEnv,
-    PursuerPolicy,
     _make_mlp,
     load_config,
     apply_curriculum,

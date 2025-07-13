@@ -5,9 +5,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from pursuit_evasion import PursuerPolicy, load_config
-from train_pursuer import PursuerOnlyEnv
-from train_pursuer_ppo import ActorCritic
+from pursuit_evasion import load_config
+from train_pursuer_ppo import ActorCritic, PursuerOnlyEnv
 
 
 def draw_spawn_volume(
@@ -54,16 +53,13 @@ def draw_spawn_volume(
     # region remains visible without the heavy meshes.
 
 
-def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = None) -> None:
+def run_episode(model_path: str, max_steps: int | None = None) -> None:
     cfg = load_config()
     cfg['evader']['awareness_mode'] = 1
     env = PursuerOnlyEnv(cfg, max_steps=max_steps)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if use_ppo:
-        model = ActorCritic(env.observation_space.shape[0])
-    else:
-        model = PursuerPolicy(env.observation_space.shape[0])
+    model = ActorCritic(env.observation_space.shape[0])
     state = torch.load(model_path, map_location=device)
     model.load_state_dict(state)
     model.to(device)
@@ -97,12 +93,8 @@ def run_episode(model_path: str, use_ppo: bool = False, max_steps: int | None = 
     while not done:
         with torch.no_grad():
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
-            if use_ppo:
-                mean, _ = model(obs_t)
-                std = model.std.expand_as(mean)
-            else:
-                mean = model(obs_t)
-                std = torch.ones_like(mean)
+            mean, _ = model(obs_t)
+            std = model.std.expand_as(mean)
             dist = torch.distributions.Normal(mean, std)
             action = dist.mean
         obs, r, done, _, info = env.step(action.cpu().numpy())
@@ -282,10 +274,7 @@ if __name__ == "__main__":
         description="Run a single episode using a saved pursuer model"
     )
     parser.add_argument(
-        "--model", type=str, default="pursuer_policy.pt", help="path to weight file"
-    )
-    parser.add_argument(
-        "--ppo", action="store_true", help="load weights from PPO training"
+        "--model", type=str, default="pursuer_ppo.pt", help="path to weight file"
     )
     parser.add_argument(
         "--steps",
@@ -295,4 +284,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    run_episode(args.model, use_ppo=args.ppo, max_steps=args.steps)
+    run_episode(args.model, max_steps=args.steps)
