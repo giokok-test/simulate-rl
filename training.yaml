@@ -49,11 +49,11 @@ training:
       pursuer_start:
         cone_half_angle: 1.5708
         inner_cone_half_angle: 1.5708
-        min_range: 1000.0
-        max_range: 1000.0
+        min_range: 10.0
+        max_range: 50.0
         yaw_range: [0.0, 0.0]
         # Initial pursuer speed sampled from this range [m/s]
-        initial_speed_range: [75.0, 75.0]
+        initial_speed_range: [20.0, 25.0]
         force_target_radius: 0.0
     end:
       evader_start:
