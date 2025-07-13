@@ -42,7 +42,19 @@ config = load_config()
 
 
 def _interpolate(start: float, end: float, progress: float) -> float:
-    """Linear interpolation helper."""
+    """Interpolate between ``start`` and ``end`` logarithmically.
+
+    When both values are positive the interpolation operates on the natural
+    logarithm of the numbers which results in smaller changes early on and
+    larger steps once ``progress`` approaches one. This is particularly useful
+    when the bounds span several orders of magnitude. Negative values or pairs
+    that cross zero fall back to simple linear interpolation.
+    """
+
+    if start > 0 and end > 0:
+        start_l = np.log(float(start))
+        end_l = np.log(float(end))
+        return float(np.exp(start_l + (end_l - start_l) * progress))
     return start + (end - start) * progress
 
 
@@ -50,8 +62,9 @@ def apply_curriculum(cfg: dict, start_cfg: dict, end_cfg: dict, progress: float)
     """Recursively interpolate ``cfg`` between ``start_cfg`` and ``end_cfg``.
 
     Only keys present in ``start_cfg`` and ``end_cfg`` are touched. Numeric
-    values are interpolated linearly while boolean values switch from the start
-    to the end setting halfway through the training run.
+    values are interpolated logarithmically using :func:`_interpolate` while
+    boolean values switch from the start to the end setting halfway through the
+    training run.
     """
 
     for key, start_val in start_cfg.items():

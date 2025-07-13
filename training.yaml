@@ -22,10 +22,9 @@ training:
   outcome_window: 100
   # Save a checkpoint every this many episodes. Set to 0 to disable.
   checkpoint_steps: 2000
-  # Curriculum progression strategy: "linear" interpolates from the
-  # starting configuration to the final one over a fixed number of
-  # stages while "adaptive" advances only when the recent success
-  # rate exceeds ``success_threshold``.
+  # Curriculum progression strategy: "linear" moves through the
+  # curriculum stages at a fixed rate while "adaptive" advances only
+  # when the recent success rate exceeds ``success_threshold``.
   curriculum_mode: linear
   # Minimum fraction of successful episodes required to move to the
   # next curriculum stage when ``curriculum_mode`` is "adaptive".
@@ -39,8 +38,8 @@ training:
   # Curriculum specifying how the starting conditions gradually expand
   # throughout training. The ``start`` dictionary defines the easiest
   # configuration while ``end`` corresponds to the final environment
-  # parameters. All numeric values are linearly interpolated from the
-  # beginning to the end of training.
+  # parameters. All numeric values are interpolated logarithmically when
+  # positive, falling back to linear interpolation otherwise.
   curriculum:
     start:
       evader_start:
