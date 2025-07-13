@@ -427,7 +427,10 @@ def train(
             # Periodically report progress on separate evaluation episodes
             eval_cfg = copy.deepcopy(cfg)
             if start_cur and end_cur:
-                apply_curriculum(eval_cfg, start_cur, end_cur, progress)
+                # Use the final curriculum values for evaluation episodes to
+                # measure performance in the target environment rather than
+                # the current training stage.
+                apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
             avg_r, success = evaluate(policy, PursuerOnlyEnv(eval_cfg))
             print(f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}")
             if writer:
