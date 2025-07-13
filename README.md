@@ -144,10 +144,13 @@ Both training scripts optionally support gradually increasing the starting
 difficulty of each episode. The ``training.curriculum`` section in
 ``training.yaml`` contains ``start`` and ``end`` dictionaries with values that are
 interpolated over the course of training. Any numeric field under these
-dictionaries will be linearly scaled from the `start` value to the `end`
-value. The `training.curriculum_stages` option specifies how many discrete
-stages are used, with ``N`` meaning ``N - 1`` transitions from the start to
-the end configuration. Progress within a stage is computed as
+dictionaries is interpolated logarithmically from the ``start`` value to the
+``end`` value when both numbers are positive. This produces small increments
+early on and larger jumps later in training. Values crossing or equal to zero
+fall back to linear interpolation. The ``training.curriculum_stages`` option
+specifies how many discrete stages are used, with ``N`` meaning ``N - 1``
+transitions from the start to the end configuration. Progress within a stage is
+computed as
 ``stage_idx / max(curriculum_stages - 1, 1)``. For example, the default configuration narrows
 the pursuer's `yaw_range` and initial `force_target_radius` to begin the
 agent immediately behind the evader while increasing `evader_start.initial_speed`
@@ -164,8 +167,8 @@ between the ``start`` and ``end`` configuration.
 The following command line arguments, accepted by both ``train_pursuer.py``
 and ``train_pursuer_ppo.py``, tune the curriculum behaviour:
 
-- ``--curriculum-mode`` – ``linear`` linearly interpolates from ``start`` to
-  ``end`` while ``adaptive`` only advances when the success threshold is
+- ``--curriculum-mode`` – ``linear`` progresses through the curriculum at a
+  fixed rate while ``adaptive`` only advances when the success threshold is
   met.
 - ``--success-threshold`` – fraction of recent episodes that must succeed
   before moving to the next curriculum stage.
