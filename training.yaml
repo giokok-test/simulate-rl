@@ -49,8 +49,8 @@ training:
       pursuer_start:
         cone_half_angle: 1.5708  
         inner_cone_half_angle: 1.5708  
-        min_range: 100.0
-        max_range: 300.0
+        min_range: 10.0
+        max_range: 30.0
         yaw_range: [0.0, 0.0]
         force_target_radius: 0.0
     end:
