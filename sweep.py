@@ -3,7 +3,7 @@ import itertools
 import os
 
 from pursuit_evasion import load_config
-from train_pursuer import train
+from train_pursuer_ppo import train
 
 
 def main() -> None:
