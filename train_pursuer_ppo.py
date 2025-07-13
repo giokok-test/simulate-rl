@@ -681,7 +681,10 @@ def train(
         if (episode + 1) % eval_freq == 0:
             eval_cfg = copy.deepcopy(cfg)
             if start_cur and end_cur:
-                apply_curriculum(eval_cfg, start_cur, end_cur, progress)
+                # Use final curriculum parameters when evaluating to track
+                # performance in the target environment regardless of the
+                # current training stage.
+                apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
             avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg))
             print(
                 f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}"

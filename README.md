@@ -51,7 +51,9 @@ The defaults for these options live in ``training.yaml`` and can be
 modified directly in that file.
 
 It will print evaluation statistics every ``--eval-freq`` episodes and a final
-summary when training finishes.
+summary when training finishes. When curriculum training is enabled these
+evaluation episodes always use the final environment configuration so progress
+is measured against the target difficulty.
 
 ### Monitoring training with TensorBoard
 
