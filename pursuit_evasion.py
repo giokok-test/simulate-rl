@@ -301,6 +301,9 @@ class PursuitEvasionEnv(gym.Env):
         self.cur_step = 0
         self._prev_ev_obs = None
         self._prev_pu_obs = None
+        # store previous positions to detect capture between steps
+        self.prev_pursuer_pos = self.pursuer_pos.copy()
+        self.prev_evader_pos = self.evader_pos.copy()
         return self._get_obs(), {}
 
     def step(self, action: dict):
@@ -318,6 +321,8 @@ class PursuitEvasionEnv(gym.Env):
 
         evader_action = np.array(action['evader'], dtype=np.float32)
         pursuer_action = np.array(action['pursuer'], dtype=np.float32)
+        prev_p_pos = self.pursuer_pos.copy()
+        prev_e_pos = self.evader_pos.copy()
         self._update_agent('evader', evader_action)
         self._update_agent('pursuer', pursuer_action)
         # shaping rewards based on change in distances
@@ -356,7 +361,7 @@ class PursuitEvasionEnv(gym.Env):
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
 
-        done, r_e, r_p_terminal = self._check_done()
+        done, r_e, r_p_terminal, outcome = self._check_done(prev_p_pos, prev_e_pos)
         shaping_reward = self.shaping_weight * shape_p
         r_e += self.shaping_weight * shape_e
         r_p = (
@@ -384,19 +389,25 @@ class PursuitEvasionEnv(gym.Env):
                 'evader_to_target': float(dist_target),
                 'start_distance': float(self.start_pe_dist),
             }
-            if dist_pe <= self.cfg['capture_radius']:
-                info['outcome'] = 'capture'
-            elif dist_target_xy <= success_thresh and self.evader_pos[2] > 0.0:
-                info['outcome'] = 'evader_success'
-            elif self.evader_pos[2] < 0.0:
-                info['outcome'] = 'evader_ground'
-            elif self.pursuer_pos[2] < 0.0:
-                info['outcome'] = 'pursuer_ground'
-            elif dist_pe >= self.cutoff_factor * self.start_pe_dist:
-                info['outcome'] = 'separation_exceeded'
+            if outcome is None:
+                if dist_pe <= self.cfg['capture_radius']:
+                    outcome = 'capture'
+                elif dist_target_xy <= success_thresh and self.evader_pos[2] > 0.0:
+                    outcome = 'evader_success'
+                elif self.evader_pos[2] < 0.0:
+                    outcome = 'evader_ground'
+                elif self.pursuer_pos[2] < 0.0:
+                    outcome = 'pursuer_ground'
+                elif dist_pe >= self.cutoff_factor * self.start_pe_dist:
+                    outcome = 'separation_exceeded'
+            if outcome:
+                info['outcome'] = outcome
             info['reward_breakdown'] = {
                 k: float(v) for k, v in self._reward_breakdown.items()
             }
+        # update stored previous positions for next step
+        self.prev_pursuer_pos = prev_p_pos
+        self.prev_evader_pos = prev_e_pos
 
         self.cur_step += 1
         return obs, reward, done, False, info
@@ -512,7 +523,11 @@ class PursuitEvasionEnv(gym.Env):
             vel_obs = (pos_obs - prev_obs) / self.dt
         return pos_obs.astype(np.float32), vel_obs.astype(np.float32)
 
-    def _check_done(self):
+    def _check_done(
+        self,
+        prev_p_pos: np.ndarray | None = None,
+        prev_e_pos: np.ndarray | None = None,
+    ):
         """Determine if the episode has terminated.
 
         Episodes end on capture, excessive separation, either agent touching
@@ -525,23 +540,43 @@ class PursuitEvasionEnv(gym.Env):
         dist_target_xy = np.linalg.norm((self.evader_pos - target)[:2])
         success_thresh = self.cfg.get('target_success_distance', 100.0)
 
-        if dist <= self.cfg['capture_radius']:
-            return True, -1.0, 1.0
+        cross_capture = False
+        if prev_p_pos is not None and prev_e_pos is not None:
+            prev_vec = prev_e_pos - prev_p_pos
+            cur_vec = self.evader_pos - self.pursuer_pos
+            if np.dot(prev_vec, cur_vec) < 0.0:
+                rel_start = prev_p_pos - prev_e_pos
+                rel_v = (
+                    (self.pursuer_pos - prev_p_pos)
+                    - (self.evader_pos - prev_e_pos)
+                )
+                v_norm_sq = np.dot(rel_v, rel_v)
+                if v_norm_sq > 1e-12:
+                    t = -np.dot(rel_start, rel_v) / v_norm_sq
+                    if 0.0 <= t <= 1.0:
+                        closest = rel_start + rel_v * t
+                        if np.linalg.norm(closest) <= self.cfg['capture_radius']:
+                            cross_capture = True
+                elif dist <= self.cfg['capture_radius']:
+                    cross_capture = True
+
+        if dist <= self.cfg['capture_radius'] or cross_capture:
+            return True, -1.0, 1.0, 'capture'
         if dist_target_xy <= success_thresh and self.evader_pos[2] > 0.0:
-            return True, 1.0, 0.0
+            return True, 1.0, 0.0, 'evader_success'
         if dist >= self.cutoff_factor * self.start_pe_dist:
-            return True, 0.0, 0.0
+            return True, 0.0, 0.0, 'separation_exceeded'
 
         # episode ends if either agent goes below ground level
         if self.pursuer_pos[2] < 0.0:
             penalty = self.cfg.get('pursuer_ground_penalty', -1.0)
-            return True, 0.0, penalty
+            return True, 0.0, penalty, 'pursuer_ground'
         if self.evader_pos[2] < 0.0:
             max_d = self.cfg.get('target_reward_distance', 100.0)
             reward = max(0.0, 1.0 - (dist_target / max_d) ** 2)
-            return True, reward, 0.0
+            return True, reward, 0.0, 'evader_ground'
 
-        return False, 0.0, 0.0
+        return False, 0.0, 0.0, None
 
     def _get_obs(self):
         """Assemble observations for both agents."""
