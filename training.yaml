@@ -26,16 +26,16 @@ training:
   # starting configuration to the final one over a fixed number of
   # stages while "adaptive" advances only when the recent success
   # rate exceeds ``success_threshold``.
-  curriculum_mode: linear
+  curriculum_mode: adaptive
   # Minimum fraction of successful episodes required to move to the
   # next curriculum stage when ``curriculum_mode`` is "adaptive".
-  success_threshold: 0.8
+  success_threshold: 0.6
   # Window size used to compute the adaptive success rate.
-  curriculum_window: 50
+  curriculum_window: 256
   # Number of discrete curriculum stages including the final environment.
   # If set to ``N`` there will be ``N - 1`` transitions from ``curriculum.start``
   # to ``curriculum.end`` over the course of training.
-  curriculum_stages: 20
+  curriculum_stages: 120
   # Curriculum specifying how the starting conditions gradually expand
   # throughout training. The ``start`` dictionary defines the easiest
   # configuration while ``end`` corresponds to the final environment
@@ -45,18 +45,18 @@ training:
     start:
       evader_start:
         distance_range: [10000.0, 10000.0]
-        initial_speed: 0.0
+        initial_speed: 1.0
       pursuer_start:
         cone_half_angle: 1.5708  
         inner_cone_half_angle: 1.5708  
-        min_range: 2.0
-        max_range: 2.5
+        min_range: 100.0
+        max_range: 300.0
         yaw_range: [0.0, 0.0]
         force_target_radius: 0.0
     end:
       evader_start:
         distance_range: [8000.0, 12000.0]
-        initial_speed: 0.1
+        initial_speed: 50
       pursuer_start:
         cone_half_angle: 1.5
         inner_cone_half_angle: 1.3
