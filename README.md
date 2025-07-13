@@ -152,7 +152,10 @@ the end configuration. Progress within a stage is computed as
 the pursuer's `yaw_range` and initial `force_target_radius` to begin the
 agent immediately behind the evader while increasing `evader_start.initial_speed`
 from 0&nbsp;m/s to 50&nbsp;m/s before expanding to the full search
-area. The curriculum makes it possible to smoothly transition from simple
+area. The pursuer's own starting velocity can be scheduled with
+`pursuer_start.initial_speed_range` so early stages may use a fixed
+speed while later ones draw from a wider range. The curriculum makes it
+possible to smoothly transition from simple
 encounters to more challenging ones. The length of the success history
 used by the adaptive curriculum is controlled with ``curriculum_window``
 while ``curriculum_stages`` defines how many intermediate steps exist
@@ -246,6 +249,10 @@ pursuer approaching from behind).  When `yaw_range` is present it overrides
 the section based spawning.  Combined with the `min_range` and
 `max_range` distances these options define where the pursuer may appear at
 the beginning of an episode.
+The initial speed of the pursuer is drawn uniformly from
+`pursuer_start.initial_speed_range`, which can also be modified via the
+training curriculum to gradually narrow or expand the spawn speed
+interval.
 Both `pursuit_evasion.py` and `train_pursuer.py` load the configuration
 at runtime, so changes take effect the next time you run the scripts.
 The reward shaping parameters `shaping_weight`, `closer_weight`,
