@@ -214,7 +214,11 @@ be ``capture`` (pursuer success), ``evader_success`` (reaches the target in the
 air), ``evader_ground`` or ``pursuer_ground`` when a crash occurs,
 ``separation_exceeded`` if the starting distance has grown beyond the
 ``separation_cutoff_factor`` multiple, or ``timeout`` when the step limit is
-reached. The evaluation helpers in the training scripts print the average
+reached. A capture is also triggered when the pursuer crosses through the
+evader's capture sphere between steps, detected by intersecting the line
+segment between consecutive pursuer positions with a radius of
+``capture_radius`` around the evader. The evaluation helpers in the training
+scripts print the average
 minimum distance and episode length during periodic evaluations.
 The logged ``min_start_ratio`` metric records how close the pursuer got
 relative to where it spawned (minimum distance divided by the starting
