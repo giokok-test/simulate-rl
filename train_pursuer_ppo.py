@@ -608,6 +608,51 @@ def train(
                         float(min_d) / float(start_d),
                         episode_counter,
                     )
+                writer.add_scalar(
+                    "train/acc_delta",
+                    info.get("pursuer_acc_delta", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "batch/acc_delta",
+                    info.get("pursuer_acc_delta", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "episode/acc_delta",
+                    info.get("pursuer_acc_delta", float("nan")),
+                    episode_counter,
+                )
+                writer.add_scalar(
+                    "train/yaw_delta",
+                    info.get("pursuer_yaw_delta", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "batch/yaw_delta",
+                    info.get("pursuer_yaw_delta", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "episode/yaw_delta",
+                    info.get("pursuer_yaw_delta", float("nan")),
+                    episode_counter,
+                )
+                writer.add_scalar(
+                    "train/pitch_delta",
+                    info.get("pursuer_pitch_delta", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "batch/pitch_delta",
+                    info.get("pursuer_pitch_delta", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "episode/pitch_delta",
+                    info.get("pursuer_pitch_delta", float("nan")),
+                    episode_counter,
+                )
                 rb = info.get("reward_breakdown", {})
                 for k, v in rb.items():
                     scalar_reward = float(v)
@@ -709,11 +754,29 @@ def train(
                                 float(min_d) / float(start_d),
                                 episode_counter + i,
                             )
+                        writer.add_scalar(
+                            "episode/acc_delta",
+                            float(inf.get("pursuer_acc_delta", float("nan"))),
+                            episode_counter + i,
+                        )
+                        writer.add_scalar(
+                            "episode/yaw_delta",
+                            float(inf.get("pursuer_yaw_delta", float("nan"))),
+                            episode_counter + i,
+                        )
+                        writer.add_scalar(
+                            "episode/pitch_delta",
+                            float(inf.get("pursuer_pitch_delta", float("nan"))),
+                            episode_counter + i,
+                        )
                 rb_sum = defaultdict(float)
                 n_info = 0
                 min_list = []
                 len_list = []
                 start_list = []
+                acc_list = []
+                yaw_list = []
+                pitch_list = []
                 for inf in infos:
                     if inf:
                         n_info += 1
@@ -739,6 +802,12 @@ def train(
                             len_list.append(inf["episode_steps"])
                         if "start_distance" in inf:
                             start_list.append(inf["start_distance"])
+                        if "pursuer_acc_delta" in inf:
+                            acc_list.append(inf["pursuer_acc_delta"])
+                        if "pursuer_yaw_delta" in inf:
+                            yaw_list.append(inf["pursuer_yaw_delta"])
+                        if "pursuer_pitch_delta" in inf:
+                            pitch_list.append(inf["pursuer_pitch_delta"])
                 if n_info:
                     for k, v in rb_sum.items():
                         avg = v / n_info
@@ -757,6 +826,15 @@ def train(
                     if len_list:
                         writer.add_scalar("train/episode_length", float(np.mean(len_list)), episode)
                         writer.add_scalar("batch/episode_length", float(np.mean(len_list)), episode)
+                    if acc_list:
+                        writer.add_scalar("train/acc_delta", float(np.mean(acc_list)), episode)
+                        writer.add_scalar("batch/acc_delta", float(np.mean(acc_list)), episode)
+                    if yaw_list:
+                        writer.add_scalar("train/yaw_delta", float(np.mean(yaw_list)), episode)
+                        writer.add_scalar("batch/yaw_delta", float(np.mean(yaw_list)), episode)
+                    if pitch_list:
+                        writer.add_scalar("train/pitch_delta", float(np.mean(pitch_list)), episode)
+                        writer.add_scalar("batch/pitch_delta", float(np.mean(pitch_list)), episode)
                     if min_list and start_list:
                         ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
                         if ratios:

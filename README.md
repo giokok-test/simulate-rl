@@ -86,6 +86,10 @@ episode statistics for each environment are written under the
 ``episode/`` namespace, while the mean values for the batch are logged
 under ``batch/``. A ``timing/episodes_per_sec`` metric tracks how many
 episodes are processed per second of wall time.
+The logger also records the cumulative change in the pursuer's commanded
+acceleration, yaw and pitch for each episode as ``train/acc_delta``,
+``train/yaw_delta`` and ``train/pitch_delta``. These per-episode totals
+are written for every environment under the ``episode/`` namespace.
 Every ``training.outcome_window`` episodes the script also prints the
 number of occurrences of each termination reason so you can quickly see
 how episodes are ending.
@@ -232,6 +236,8 @@ minimum distance and episode length during periodic evaluations.
 The logged ``min_start_ratio`` metric records how close the pursuer got
 relative to where it spawned (minimum distance divided by the starting
 separation).
+The total change in the pursuer's action commands over an episode is
+available via the ``*_delta`` metrics described above.
 
 ## Adjusting environment parameters
 

@@ -313,6 +313,10 @@ class PursuitEvasionEnv(gym.Env):
         self.cur_step = 0
         self._prev_ev_obs = None
         self._prev_pu_obs = None
+        self.prev_pursuer_action = None
+        self.pursuer_acc_delta = 0.0
+        self.pursuer_yaw_delta = 0.0
+        self.pursuer_pitch_delta = 0.0
         # store previous positions to detect capture between steps
         self.prev_pursuer_pos = self.pursuer_pos.copy()
         self.prev_evader_pos = self.evader_pos.copy()
@@ -333,6 +337,12 @@ class PursuitEvasionEnv(gym.Env):
 
         evader_action = np.array(action['evader'], dtype=np.float32)
         pursuer_action = np.array(action['pursuer'], dtype=np.float32)
+        if self.prev_pursuer_action is not None:
+            diff = pursuer_action - self.prev_pursuer_action
+            self.pursuer_acc_delta += abs(diff[0])
+            self.pursuer_yaw_delta += abs(np.arctan2(np.sin(diff[1]), np.cos(diff[1])))
+            self.pursuer_pitch_delta += abs(diff[2])
+        self.prev_pursuer_action = pursuer_action
         prev_p_pos = self.pursuer_pos.copy()
         prev_e_pos = self.evader_pos.copy()
         self._update_agent('evader', evader_action)
@@ -417,6 +427,9 @@ class PursuitEvasionEnv(gym.Env):
             info['reward_breakdown'] = {
                 k: float(v) for k, v in self._reward_breakdown.items()
             }
+            info['pursuer_acc_delta'] = float(self.pursuer_acc_delta)
+            info['pursuer_yaw_delta'] = float(self.pursuer_yaw_delta)
+            info['pursuer_pitch_delta'] = float(self.pursuer_pitch_delta)
         # update stored previous positions for next step
         self.prev_pursuer_pos = prev_p_pos
         self.prev_evader_pos = prev_e_pos
