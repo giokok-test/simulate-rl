@@ -13,6 +13,7 @@ import gymnasium as gym
 from typing import Optional
 from collections import defaultdict, deque
 import yaml
+import time
 
 TABLE_HEADER = (
     f"{'step':>5} | {'pursuer→evader [m]':>26} | "
@@ -341,6 +342,9 @@ def train(
         else None
     )
 
+    episode_counter = 0
+    start_time = time.perf_counter()
+
     gamma = training_cfg.get('gamma', 0.99)
     clip_ratio = training_cfg.get('clip_ratio', 0.2)
     ppo_epochs = training_cfg.get('ppo_epochs', 4)
@@ -545,16 +549,38 @@ def train(
             episode_reward = sum(rewards)
             if writer:
                 writer.add_scalar("train/episode_reward", episode_reward, episode)
+                writer.add_scalar("batch/episode_reward", episode_reward, episode)
+                writer.add_scalar("episode/reward", episode_reward, episode_counter)
                 if info:
                     writer.add_scalar(
                         "train/min_distance",
                         info.get("min_distance", float("nan")),
                         episode,
                     )
+                    writer.add_scalar(
+                        "batch/min_distance",
+                        info.get("min_distance", float("nan")),
+                        episode,
+                    )
+                    writer.add_scalar(
+                        "episode/min_distance",
+                        info.get("min_distance", float("nan")),
+                        episode_counter,
+                    )
                 writer.add_scalar(
                     "train/episode_length",
                     info.get("episode_steps", step),
                     episode,
+                )
+                writer.add_scalar(
+                    "batch/episode_length",
+                    info.get("episode_steps", step),
+                    episode,
+                )
+                writer.add_scalar(
+                    "episode/length",
+                    info.get("episode_steps", step),
+                    episode_counter,
                 )
                 start_d = info.get("start_distance")
                 min_d = info.get("min_distance")
@@ -564,11 +590,24 @@ def train(
                         float(min_d) / float(start_d),
                         episode,
                     )
+                    writer.add_scalar(
+                        "batch/min_start_ratio",
+                        float(min_d) / float(start_d),
+                        episode,
+                    )
+                    writer.add_scalar(
+                        "episode/min_start_ratio",
+                        float(min_d) / float(start_d),
+                        episode_counter,
+                    )
                 rb = info.get("reward_breakdown", {})
                 for k, v in rb.items():
-                    # Ensure we pass a Python float (0-dim tensor) to add_scalar
-                    scalar_reward = float((v / n_info).mean())
+                    scalar_reward = float(v)
                     writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
+                    writer.add_scalar(
+                        f"episode/reward_{k}", scalar_reward, episode_counter
+                    )
+                episode_counter += 1
             if info:
                 outcome = info.get('outcome', 'timeout')
                 outcome_counts[outcome] += 1
@@ -609,6 +648,12 @@ def train(
             episode_outcomes = defaultdict(int)
             if writer:
                 writer.add_scalar("train/episode_reward", episode_reward, episode)
+                writer.add_scalar("batch/episode_reward", episode_reward, episode)
+                for i in range(num_envs):
+                    env_r = sum(rewards[i])
+                    writer.add_scalar(
+                        "episode/reward", env_r, episode_counter + i
+                    )
                 md_vals = [inf.get("min_distance", float("nan")) for inf in infos if inf]
                 step_vals = [inf.get("episode_steps", float("nan")) for inf in infos if inf]
                 if md_vals:
@@ -617,12 +662,45 @@ def train(
                         float(np.nanmean(md_vals)),
                         episode,
                     )
+                    writer.add_scalar(
+                        "batch/min_distance",
+                        float(np.nanmean(md_vals)),
+                        episode,
+                    )
+                for i, inf in enumerate(infos):
+                    if inf and "min_distance" in inf:
+                        writer.add_scalar(
+                            "episode/min_distance",
+                            float(inf["min_distance"]),
+                            episode_counter + i,
+                        )
                 if step_vals:
                     writer.add_scalar(
                         "train/episode_length",
                         float(np.nanmean(step_vals)),
                         episode,
                     )
+                    writer.add_scalar(
+                        "batch/episode_length",
+                        float(np.nanmean(step_vals)),
+                        episode,
+                    )
+                for i, inf in enumerate(infos):
+                    if inf and "episode_steps" in inf:
+                        writer.add_scalar(
+                            "episode/length",
+                            float(inf["episode_steps"]),
+                            episode_counter + i,
+                        )
+                    if inf:
+                        start_d = inf.get("start_distance")
+                        min_d = inf.get("min_distance")
+                        if start_d is not None and min_d is not None and start_d > 0:
+                            writer.add_scalar(
+                                "episode/min_start_ratio",
+                                float(min_d) / float(start_d),
+                                episode_counter + i,
+                            )
                 rb_sum = defaultdict(float)
                 n_info = 0
                 min_list = []
@@ -655,14 +733,26 @@ def train(
                     for k, v in rb_sum.items():
                         scalar_reward = float((v / n_info).mean())
                         writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
+                for i, inf in enumerate(infos):
+                    if inf:
+                        rb_env = inf.get("reward_breakdown", {})
+                        for k, v in rb_env.items():
+                            writer.add_scalar(
+                                f"episode/reward_{k}", float(v), episode_counter + i
+                            )
                     if min_list:
                         writer.add_scalar("train/min_distance", float(np.mean(min_list)), episode)
+                        writer.add_scalar("batch/min_distance", float(np.mean(min_list)), episode)
                     if len_list:
                         writer.add_scalar("train/episode_length", float(np.mean(len_list)), episode)
+                        writer.add_scalar("batch/episode_length", float(np.mean(len_list)), episode)
                     if min_list and start_list:
                         ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
                         if ratios:
                             writer.add_scalar("train/min_start_ratio", float(np.mean(ratios)), episode)
+                            writer.add_scalar("batch/min_start_ratio", float(np.mean(ratios)), episode)
+                # per-environment min_start_ratio logged earlier
+                episode_counter += num_envs
                 if (episode + 1) % outcome_window == 0:
                     total = sum(outcome_counts.values())
                     for k, c in outcome_counts.items():
@@ -676,6 +766,10 @@ def train(
                     outcome_counts = defaultdict(int)
             if episode_outcomes:
                 print(f"Episode {episode+1}: outcomes={dict(episode_outcomes)} reward={episode_reward:.2f}")
+
+        if writer:
+            eps_sec = episode_counter / max(time.perf_counter() - start_time, 1e-8)
+            writer.add_scalar("timing/episodes_per_sec", eps_sec, episode)
 
         if (episode + 1) % eval_freq == 0:
             eval_cfg = copy.deepcopy(cfg)
