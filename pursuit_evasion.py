@@ -287,6 +287,15 @@ class PursuitEvasionEnv(gym.Env):
         self.pursuer_vel = p_vel.astype(np.float32)
         self.pursuer_force_dir = p_dir.astype(np.float32)
         self.pursuer_force_mag = 0.0
+        # store initial yaw/pitch of both agents for logging
+        self.init_pursuer_yaw = float(np.arctan2(self.pursuer_force_dir[1], self.pursuer_force_dir[0]))
+        self.init_pursuer_pitch = float(
+            np.arctan2(self.pursuer_force_dir[2], np.linalg.norm(self.pursuer_force_dir[:2]))
+        )
+        self.init_evader_yaw = float(np.arctan2(self.evader_force_dir[1], self.evader_force_dir[0]))
+        self.init_evader_pitch = float(
+            np.arctan2(self.evader_force_dir[2], np.linalg.norm(self.evader_force_dir[:2]))
+        )
         # record baseline distances for shaping rewards
         self.prev_pe_dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
         vec_pe = self.evader_pos - self.pursuer_pos
@@ -430,6 +439,23 @@ class PursuitEvasionEnv(gym.Env):
             info['pursuer_acc_delta'] = float(self.pursuer_acc_delta)
             info['pursuer_yaw_delta'] = float(self.pursuer_yaw_delta)
             info['pursuer_pitch_delta'] = float(self.pursuer_pitch_delta)
+            # difference between starting and final orientation of both agents
+            p_yaw = np.arctan2(self.pursuer_force_dir[1], self.pursuer_force_dir[0])
+            p_pitch = np.arctan2(
+                self.pursuer_force_dir[2], np.linalg.norm(self.pursuer_force_dir[:2])
+            )
+            yaw_diff = np.arctan2(np.sin(p_yaw - self.init_pursuer_yaw), np.cos(p_yaw - self.init_pursuer_yaw))
+            pitch_diff = p_pitch - self.init_pursuer_pitch
+            info['pursuer_yaw_diff'] = float(yaw_diff)
+            info['pursuer_pitch_diff'] = float(pitch_diff)
+            e_yaw = np.arctan2(self.evader_force_dir[1], self.evader_force_dir[0])
+            e_pitch = np.arctan2(
+                self.evader_force_dir[2], np.linalg.norm(self.evader_force_dir[:2])
+            )
+            info['evader_yaw_diff'] = float(
+                np.arctan2(np.sin(e_yaw - self.init_evader_yaw), np.cos(e_yaw - self.init_evader_yaw))
+            )
+            info['evader_pitch_diff'] = float(e_pitch - self.init_evader_pitch)
         # update stored previous positions for next step
         self.prev_pursuer_pos = prev_p_pos
         self.prev_evader_pos = prev_e_pos
