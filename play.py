@@ -140,6 +140,15 @@ def run_episode(model_path: str, max_steps: int | None = None) -> None:
             f"ratio={ratio}  "
             f"outcome={info.get('outcome', 'unknown')}"
         )
+        acc_d = info.get('pursuer_acc_delta')
+        yaw_d = info.get('pursuer_yaw_delta')
+        pitch_d = info.get('pursuer_pitch_delta')
+        if acc_d is not None and yaw_d is not None and pitch_d is not None:
+            print(
+                f"acc_delta={acc_d:.2f}  "
+                f"yaw_delta={yaw_d:.2f}  "
+                f"pitch_delta={pitch_d:.2f}"
+            )
 
     # Plot the trajectories in 3D
     fig = plt.figure()
