@@ -81,7 +81,11 @@ distance to the evader and mean episode length are logged under
 ``train/min_distance`` and ``train/episode_length``.
 The ratio between the closest approach and the initial pursuer--evader
 distance is stored as ``train/min_start_ratio`` to help gauge how much
-closer the pursuer gets relative to the spawn distance.
+closer the pursuer gets relative to the spawn distance.  Individual
+episode statistics for each environment are written under the
+``episode/`` namespace, while the mean values for the batch are logged
+under ``batch/``. A ``timing/episodes_per_sec`` metric tracks how many
+episodes are processed per second of wall time.
 Every ``training.outcome_window`` episodes the script also prints the
 number of occurrences of each termination reason so you can quickly see
 how episodes are ending.
