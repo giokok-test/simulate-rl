@@ -653,6 +653,36 @@ def train(
                     info.get("pursuer_pitch_delta", float("nan")),
                     episode_counter,
                 )
+                writer.add_scalar(
+                    "train/yaw_diff",
+                    info.get("pursuer_yaw_diff", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "batch/yaw_diff",
+                    info.get("pursuer_yaw_diff", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "episode/yaw_diff",
+                    info.get("pursuer_yaw_diff", float("nan")),
+                    episode_counter,
+                )
+                writer.add_scalar(
+                    "train/pitch_diff",
+                    info.get("pursuer_pitch_diff", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "batch/pitch_diff",
+                    info.get("pursuer_pitch_diff", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "episode/pitch_diff",
+                    info.get("pursuer_pitch_diff", float("nan")),
+                    episode_counter,
+                )
                 rb = info.get("reward_breakdown", {})
                 for k, v in rb.items():
                     scalar_reward = float(v)
@@ -777,6 +807,8 @@ def train(
                 acc_list = []
                 yaw_list = []
                 pitch_list = []
+                yaw_diff_list = []
+                pitch_diff_list = []
                 for inf in infos:
                     if inf:
                         n_info += 1
@@ -808,6 +840,10 @@ def train(
                             yaw_list.append(inf["pursuer_yaw_delta"])
                         if "pursuer_pitch_delta" in inf:
                             pitch_list.append(inf["pursuer_pitch_delta"])
+                        if "pursuer_yaw_diff" in inf:
+                            yaw_diff_list.append(inf["pursuer_yaw_diff"])
+                        if "pursuer_pitch_diff" in inf:
+                            pitch_diff_list.append(inf["pursuer_pitch_diff"])
                 if n_info:
                     for k, v in rb_sum.items():
                         avg = v / n_info
@@ -835,6 +871,12 @@ def train(
                     if pitch_list:
                         writer.add_scalar("train/pitch_delta", float(np.mean(pitch_list)), episode)
                         writer.add_scalar("batch/pitch_delta", float(np.mean(pitch_list)), episode)
+                    if yaw_diff_list:
+                        writer.add_scalar("train/yaw_diff", float(np.mean(yaw_diff_list)), episode)
+                        writer.add_scalar("batch/yaw_diff", float(np.mean(yaw_diff_list)), episode)
+                    if pitch_diff_list:
+                        writer.add_scalar("train/pitch_diff", float(np.mean(pitch_diff_list)), episode)
+                        writer.add_scalar("batch/pitch_diff", float(np.mean(pitch_diff_list)), episode)
                     if min_list and start_list:
                         ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
                         if ratios:
