@@ -15,11 +15,15 @@ from collections import defaultdict, deque
 import yaml
 import time
 
-TABLE_HEADER = (
-    f"{'step':>5} | {'pursuer→evader [m]':>26} | "
-    f"{'evader→target [m]':>26} | {'pursuer vel [m/s]':>26} | "
-    f"{'evader vel [m/s]':>26} | {'p dir':>18} | "
-    f"{'e dir':>18} | {'p→e dir':>18}"
+TABLE_HEADER = "{:>5} | {:>26} | {:>26} | {:>26} | {:>26} | {:>18} | {:>18} | {:>18}".format(
+    "step",
+    "pursuer->evader [m]",
+    "evader->target [m]",
+    "pursuer vel [m/s]",
+    "evader vel [m/s]",
+    "p dir",
+    "e dir",
+    "p->e dir",
 )
 
 
@@ -351,11 +355,15 @@ def train(
     entropy_start = training_cfg.get('entropy_coef_start', 0.01)
     entropy_end = training_cfg.get('entropy_coef_end', entropy_start)
 
-    header = (
-        f"{'step':>5} | {'pursuer→evader [m]':>26} | "
-        f"{'evader→target [m]':>26} | {'pursuer vel [m/s]':>26} | "
-        f"{'evader vel [m/s]':>26} | {'p dir':>18} | {'e dir':>18} | "
-        f"{'p→e dir':>18}"
+    header = "{:>5} | {:>26} | {:>26} | {:>26} | {:>26} | {:>18} | {:>18} | {:>18}".format(
+        "step",
+        "pursuer->evader [m]",
+        "evader->target [m]",
+        "pursuer vel [m/s]",
+        "evader vel [m/s]",
+        "p dir",
+        "e dir",
+        "p->e dir",
     )
 
     efficiency_logged = False
