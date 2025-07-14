@@ -203,7 +203,10 @@ which is useful for quickly checking that the environment works.
   marks the evader's goal position and draws arrows indicating the initial
   heading of both players. During the run a table prints the distance vectors
   between the players and the goal along with the current velocities for both
-  agents. The spawn volume for the pursuer is now outlined with green lines
+  agents. The table header now uses ASCII arrows (``->``) instead of Unicode
+  symbols for broader compatibility and is formatted with ``str.format`` so the
+  script also runs on older Python versions. The spawn volume for the pursuer is
+  outlined with green lines
   only (surface fills were removed to keep the plot responsive).
 - `plot_config.py` renders a stand-alone visualisation of the environment
   configuration showing an outline of the spawn volume. The accompanying

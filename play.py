@@ -76,11 +76,15 @@ def run_episode(model_path: str, max_steps: int | None = None) -> None:
     evader_traj = [env.env.evader_pos.copy()]
 
     # print table header showing distance vectors, velocities and directions
-    header = (
-        f"{'step':>5} | {'pursuer→evader [m]':>26} | "
-        f"{'evader→target [m]':>26} | {'pursuer vel [m/s]':>26} | "
-        f"{'evader vel [m/s]':>26} | {'p dir':>18} | {'e dir':>18} | "
-        f"{'p→e dir':>18}"
+    header = "{:>5} | {:>26} | {:>26} | {:>26} | {:>26} | {:>18} | {:>18} | {:>18}".format(
+        "step",
+        "pursuer->evader [m]",
+        "evader->target [m]",
+        "pursuer vel [m/s]",
+        "evader vel [m/s]",
+        "p dir",
+        "e dir",
+        "p->e dir",
     )
     print(header)
     print("-" * len(header))
