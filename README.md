@@ -96,6 +96,9 @@ When running PPO with multiple environments the logger now reports the
 mean minimum pursuer--evader distance and episode length across all
 environments.  A summary of how many episodes ended in each termination
 state is printed every iteration for easier monitoring.
+Reward breakdown metrics are averaged across all environments so the
+``train/reward_*`` values reflect the mean contribution of each component
+per episode.
 
 ### New training options
 

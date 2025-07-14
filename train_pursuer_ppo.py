@@ -739,7 +739,7 @@ def train(
                             start_list.append(inf["start_distance"])
                 if n_info:
                     for k, v in rb_sum.items():
-                        scalar_reward = float((v / n_info).mean())
+                        scalar_reward = float(v / n_info)
                         writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
                 for i, inf in enumerate(infos):
                     if inf:
