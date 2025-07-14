@@ -718,7 +718,9 @@ def train(
                     if inf:
                         n_info += 1
                         for k, v in inf.get("reward_breakdown", {}).items():
-                            rb_sum[k] += v
+                            arr = np.asarray(v)    
+                            scalar = float(arr.mean())
+                            rb_sum[k] += scalar
                         outcome = inf.get("outcome", "timeout")
                         outcome_counts[outcome] += 1
                         episode_outcomes[outcome] += 1
@@ -739,15 +741,16 @@ def train(
                             start_list.append(inf["start_distance"])
                 if n_info:
                     for k, v in rb_sum.items():
-                        scalar_reward = float(v / n_info)
+                        avg = v / n_info
+                        scalar_reward = float(avg.item() if hasattr(avg, "item") else avg)
                         writer.add_scalar(f"train/reward_{k}", scalar_reward, episode)
                 for i, inf in enumerate(infos):
                     if inf:
                         rb_env = inf.get("reward_breakdown", {})
                         for k, v in rb_env.items():
-                            writer.add_scalar(
-                                f"episode/reward_{k}", float(v), episode_counter + i
-                            )
+                            arr = np.asarray(v)
+                            scalar = float(arr.mean())  # or .sum() if you’d rather aggregate that way
+                            writer.add_scalar(f"episode/reward_{k}", scalar, episode_counter + i)
                     if min_list:
                         writer.add_scalar("train/min_distance", float(np.mean(min_list)), episode)
                         writer.add_scalar("batch/min_distance", float(np.mean(min_list)), episode)
