@@ -50,6 +50,10 @@ python train_pursuer_ppo.py --episodes 200 --lr 5e-4 --eval-freq 20 --checkpoint
 The defaults for these options live in ``training.yaml`` and can be
 modified directly in that file.
 
+Pass ``--profile`` to print how much time is spent collecting rollouts,
+optimising the policy and running evaluations. When ``--log-dir`` is set the
+timings are also written under the ``timing/`` namespace for TensorBoard.
+
 It will print evaluation statistics every ``--eval-freq`` episodes and a final
 summary when training finishes. When curriculum training is enabled these
 evaluation episodes always use the final environment configuration so progress
@@ -217,6 +221,8 @@ which is useful for quickly checking that the environment works.
   script also runs on older Python versions. The spawn volume for the pursuer is
   outlined with green lines
   only (surface fills were removed to keep the plot responsive).
+  Use ``--profile`` to print how long inference, environment stepping and
+  plotting take.
 - `plot_config.py` renders a stand-alone visualisation of the environment
   configuration showing an outline of the spawn volume. The accompanying
   `SpawnVolumeDemo.ipynb` notebook calls this script so you can interactively
