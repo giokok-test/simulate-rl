@@ -1,7 +1,7 @@
 # Training related options
 training:
   # Number of training episodes
-  episodes: 300000
+  episodes: 3000000
   # Optimiser learning rate
   learning_rate: 0.05
   # L2 weight decay applied by the optimiser
@@ -19,7 +19,7 @@ training:
   # Run evaluation episodes every this many training episodes
   eval_freq: 20000
   # Episodes per bin for termination statistics
-  outcome_window: 100
+  outcome_window: 1000
   # Save a checkpoint every this many episodes. Set to 0 to disable.
   checkpoint_steps: 2000
   # Curriculum progression strategy: "linear" interpolates from the
