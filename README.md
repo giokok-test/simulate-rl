@@ -78,7 +78,7 @@ This will show episode rewards, evaluation results and losses during training.
 When a log directory is set, periodic checkpoints created with
 ``--checkpoint-every`` are stored under ``<log-dir>/checkpoints``.
 The logs also record a breakdown of the pursuer reward into shaping,
-closer, angle, heading, align and terminal components as well as the fractions of each
+closer, heading, align and terminal components as well as the fractions of each
 termination type aggregated over ``training.outcome_window`` episodes.
 When running multiple environments in parallel the average minimum
 distance to the evader and mean episode length are logged under
@@ -234,7 +234,7 @@ closest pursuer--evader distance, number of steps and outcome. The outcome can
 be ``capture`` (pursuer success), ``evader_success`` (reaches the target in the
 air), ``evader_ground`` or ``pursuer_ground`` when a crash occurs,
 ``separation_exceeded`` if the starting distance has grown beyond the
-``separation_cutoff_factor`` multiple, or ``timeout`` when the step limit is
+``separation_cutoff_factor`` multiple (incurring ``separation_penalty``), or ``timeout`` when the step limit is
 reached. A capture is also triggered when the pursuer crosses through the
 evader's capture sphere between steps, detected by intersecting the line
 segment between consecutive pursuer positions with a radius of
@@ -276,11 +276,12 @@ interval.
 Both `pursuit_evasion.py` and `train_pursuer_ppo.py` load the configuration
 at runtime, so changes take effect the next time you run the script.
 The reward shaping parameters `shaping_weight`, `closer_weight`,
-`angle_weight`, `heading_weight` and `align_weight` can be adjusted
+`heading_weight` and `align_weight` can be adjusted
 here as well to encourage desired
 behaviour. The `separation_cutoff_factor` option defines a multiplier of
 the initial pursuer--evader distance that ends the episode when the
-agents drift farther apart than this threshold.
+agents drift farther apart than this threshold. When this occurs the
+pursuer receives `separation_penalty` as a terminal reward.
 The `capture_bonus` setting adds a time incentive for the pursuer by
 increasing its terminal reward when a capture occurs earlier. The final
 reward becomes `1 + capture_bonus * (max_steps - episode_steps)` where
