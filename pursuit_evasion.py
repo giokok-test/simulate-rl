@@ -189,10 +189,6 @@ class PursuitEvasionEnv(gym.Env):
         # Reward for reducing the difference between the pursuer and
         # evader headings from one step to the next.
         self.heading_weight = self.cfg.get('heading_weight', 0.0)
-        # Bonus for keeping the pursuer pointed inside the evader's
-        # capture cone across consecutive steps. Scales with the
-        # inverse distance to the evader.
-        self.capture_cone_weight = self.cfg.get('capture_cone_weight', 0.0)
         self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
         # maximum allowed separation before the episode ends
         self.cutoff_factor = self.cfg.get('separation_cutoff_factor', 2.0)
@@ -320,7 +316,6 @@ class PursuitEvasionEnv(gym.Env):
             'closer': 0.0,
             'angle': 0.0,
             'heading': 0.0,
-            'cone': 0.0,
             'time': 0.0,
         }
         # metrics for episode statistics
@@ -332,17 +327,10 @@ class PursuitEvasionEnv(gym.Env):
         self.pursuer_acc_delta = 0.0
         self.pursuer_yaw_delta = 0.0
         self.pursuer_pitch_delta = 0.0
-        self.cone_calc_time = 0.0
         # store previous positions to detect capture between steps
         self.prev_pursuer_pos = self.pursuer_pos.copy()
         self.prev_evader_pos = self.evader_pos.copy()
         vec_pe = self.evader_pos - self.pursuer_pos
-        cone_angle = np.arcsin(
-            min(1.0, self.cfg['capture_radius'] / (self.prev_pe_dist + 1e-8))
-        )
-        self.prev_cone_aligned = (
-            self._angle_between(self.pursuer_force_dir, vec_pe) <= cone_angle
-        )
         return self._get_obs(), {}
 
     def step(self, action: dict):
@@ -405,29 +393,6 @@ class PursuitEvasionEnv(gym.Env):
             )
         self.prev_heading_angle = head_ang
 
-        cone_bonus = 0.0
-        t0 = time.perf_counter()
-        if self.capture_cone_weight > 0.0:
-            prev_vec = prev_e_pos - prev_p_pos
-            prev_cone = np.arcsin(
-                min(1.0, self.cfg['capture_radius'] / (self.prev_pe_dist + 1e-8))
-            )
-            prev_ang = self._angle_between(prev_dir, prev_vec)
-            cone_angle = np.arcsin(
-                min(1.0, self.cfg['capture_radius'] / (dist_pe + 1e-8))
-            )
-            in_prev = self.prev_cone_aligned and prev_ang <= prev_cone
-            in_cur = angle <= cone_angle
-            self.prev_cone_aligned = in_cur
-            if in_prev and in_cur:
-                cone_bonus = self.capture_cone_weight * (
-                    self.cfg['capture_radius'] / (dist_pe + 1e-8)
-                )
-        else:
-            self.prev_cone_aligned = angle <= np.arcsin(
-                min(1.0, self.cfg['capture_radius'] / (dist_pe + 1e-8))
-            )
-        self.cone_calc_time += time.perf_counter() - t0
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
 
@@ -440,7 +405,6 @@ class PursuitEvasionEnv(gym.Env):
             + closer_bonus
             + angle_bonus
             + heading_bonus
-            + cone_bonus
             - 0.001
         )
         self._reward_breakdown['terminal'] += r_p_terminal
@@ -448,7 +412,6 @@ class PursuitEvasionEnv(gym.Env):
         self._reward_breakdown['closer'] += closer_bonus
         self._reward_breakdown['angle'] += angle_bonus
         self._reward_breakdown['heading'] += heading_bonus
-        self._reward_breakdown['cone'] += cone_bonus
         self._reward_breakdown['time'] += -0.001
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
@@ -497,7 +460,6 @@ class PursuitEvasionEnv(gym.Env):
                 np.arctan2(np.sin(e_yaw - self.init_evader_yaw), np.cos(e_yaw - self.init_evader_yaw))
             )
             info['evader_pitch_diff'] = float(e_pitch - self.init_evader_pitch)
-            info['cone_calc_time'] = float(self.cone_calc_time)
         # update stored previous positions for next step
         self.prev_pursuer_pos = prev_p_pos
         self.prev_evader_pos = prev_e_pos
