@@ -3,7 +3,7 @@ training:
   # Number of training episodes
   episodes: 300000
   # Optimiser learning rate
-  learning_rate: 0.001
+  learning_rate: 0.05
   # L2 weight decay applied by the optimiser
   weight_decay: 0.0
   # StepLR schedule - set step size to 0 to disable
@@ -59,7 +59,7 @@ training:
         max_range: 50.0
         yaw_range: [0.0, 0.0]
         # Initial pursuer speed sampled from this range [m/s]
-        initial_speed_range: [20.0, 25.0]
+        initial_speed_range: [50.0, 50.0]
         force_target_radius: 0.0
     end:
       evader_start:
