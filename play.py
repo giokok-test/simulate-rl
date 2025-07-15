@@ -7,6 +7,8 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from pursuit_evasion import load_config
 from train_pursuer_ppo import ActorCritic, PursuerOnlyEnv
+import cProfile
+import pstats
 
 
 def draw_spawn_volume(
@@ -299,6 +301,19 @@ if __name__ == "__main__":
         default=None,
         help="override maximum episode steps",
     )
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default=None,
+        help="write profiling data to this file",
+    )
     args = parser.parse_args()
-
-    run_episode(args.model, max_steps=args.steps)
+    if args.profile:
+        prof = cProfile.Profile()
+        prof.enable()
+        run_episode(args.model, max_steps=args.steps)
+        prof.disable()
+        prof.dump_stats(args.profile)
+        pstats.Stats(prof).sort_stats("cumulative").print_stats(30)
+    else:
+        run_episode(args.model, max_steps=args.steps)

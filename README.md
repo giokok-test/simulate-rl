@@ -50,6 +50,13 @@ python train_pursuer_ppo.py --episodes 200 --lr 5e-4 --eval-freq 20 --checkpoint
 The defaults for these options live in ``training.yaml`` and can be
 modified directly in that file.
 
+Pass ``--profile`` with a file name to record `cProfile` statistics for the
+entire training run:
+
+```bash
+python train_pursuer_ppo.py --profile train.prof
+```
+
 It will print evaluation statistics every ``--eval-freq`` episodes and a final
 summary when training finishes. When curriculum training is enabled these
 evaluation episodes always use the final environment configuration so progress
@@ -208,6 +215,8 @@ which is useful for quickly checking that the environment works.
   policy. Episodes run for the
   duration specified by `episode_duration` in ``env.yaml`` unless `--steps` is
   used to override the maximum number of simulation steps.
+  Pass ``--profile`` with a file name to generate a report of where time is spent
+  during the episode.
   The plot now highlights the starting and final positions of both agents,
   marks the evader's goal position and draws arrows indicating the initial
   heading of both players. During the run a table prints the distance vectors

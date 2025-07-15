@@ -14,6 +14,8 @@ from typing import Optional
 from collections import defaultdict, deque
 import yaml
 import time
+import cProfile
+import pstats
 
 TABLE_HEADER = "{:>5} | {:>26} | {:>26} | {:>26} | {:>26} | {:>18} | {:>18} | {:>18}".format(
     "step",
@@ -1007,6 +1009,11 @@ if __name__ == "__main__":
         help="write TensorBoard logs to this directory",
     )
     parser.add_argument(
+        "--profile",
+        type=str,
+        help="write cProfile data to this file",
+    )
+    parser.add_argument(
         "--num-envs",
         type=int,
         default=8,
@@ -1122,11 +1129,26 @@ if __name__ == "__main__":
     if args.time_step is not None:
         config['time_step'] = args.time_step
 
-    train(
-        config,
-        save_path=args.save_path,
-        checkpoint_every=training_cfg.get('checkpoint_steps'),
-        resume_from=args.resume_from,
-        log_dir=args.log_dir,
-        num_envs=args.num_envs,
-    )
+    if args.profile:
+        prof = cProfile.Profile()
+        prof.enable()
+        train(
+            config,
+            save_path=args.save_path,
+            checkpoint_every=training_cfg.get('checkpoint_steps'),
+            resume_from=args.resume_from,
+            log_dir=args.log_dir,
+            num_envs=args.num_envs,
+        )
+        prof.disable()
+        prof.dump_stats(args.profile)
+        pstats.Stats(prof).sort_stats("cumulative").print_stats(30)
+    else:
+        train(
+            config,
+            save_path=args.save_path,
+            checkpoint_every=training_cfg.get('checkpoint_steps'),
+            resume_from=args.resume_from,
+            log_dir=args.log_dir,
+            num_envs=args.num_envs,
+        )
