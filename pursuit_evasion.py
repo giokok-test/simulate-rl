@@ -183,11 +183,7 @@ class PursuitEvasionEnv(gym.Env):
         # evader between consecutive steps. This complements the basic shaping
         # reward above which encourages closing the gap proportionally.
         self.closer_weight = self.cfg.get('closer_weight', 0.0)
-        # Reward for reducing the angle between the pursuer's force direction
-        # and the line of sight to the evader from one step to the next.
-        self.angle_weight = self.cfg.get('angle_weight', 0.0)
-        # Reward for reducing the difference between the pursuer and
-        # evader headings from one step to the next.
+        # Reward for aligning the pursuer and evader headings.
         self.heading_weight = self.cfg.get('heading_weight', 0.0)
         # Bonus for directly pointing the pursuer toward the evader.
         self.align_weight = self.cfg.get('align_weight', 0.0)
@@ -301,12 +297,9 @@ class PursuitEvasionEnv(gym.Env):
         )
         # record baseline distances for shaping rewards
         self.prev_pe_dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
-        vec_pe = self.evader_pos - self.pursuer_pos
-        self.prev_pe_angle = self._angle_between(self.pursuer_force_dir, vec_pe)
         # heading difference between the agents for shaping
         h_e = self.evader_vel / (np.linalg.norm(self.evader_vel) + 1e-8)
         h_p = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
-        self.prev_heading_angle = self._angle_between(h_p, h_e)
         # store the starting distance for logging
         self.start_pe_dist = self.prev_pe_dist
         target = np.array(self.cfg['target_position'], dtype=np.float32)
@@ -316,7 +309,6 @@ class PursuitEvasionEnv(gym.Env):
             'terminal': 0.0,
             'shaping': 0.0,
             'closer': 0.0,
-            'angle': 0.0,
             'heading': 0.0,
             'align': 0.0,
             'time': 0.0,
@@ -377,24 +369,10 @@ class PursuitEvasionEnv(gym.Env):
         closer_bonus = 0.0
         if self.closer_weight > 0.0 and dist_pe < self.prev_pe_dist:
             closer_bonus = self.closer_weight * (self.prev_pe_dist - dist_pe)
-        # Reward when the pursuer aligns its force direction with the line of
-        # sight to the evader compared to the previous step.
-        vec_pe = self.evader_pos - self.pursuer_pos
-        angle = self._angle_between(self.pursuer_force_dir, vec_pe)
-        angle_bonus = 0.0
-        if self.angle_weight > 0.0 and angle < self.prev_pe_angle:
-            angle_bonus = self.angle_weight * (self.prev_pe_angle - angle)
-        self.prev_pe_angle = angle
         # Reward for aligning the pursuer and evader headings
         h_e = self.evader_vel / (np.linalg.norm(self.evader_vel) + 1e-8)
         h_p = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
-        head_ang = self._angle_between(h_p, h_e)
-        heading_bonus = 0.0
-        if self.heading_weight > 0.0 and head_ang < self.prev_heading_angle:
-            heading_bonus = self.heading_weight * (
-                self.prev_heading_angle - head_ang
-            )
-        self.prev_heading_angle = head_ang
+        heading_bonus = self.heading_weight * float(np.dot(h_p, h_e))
         # Bonus for pointing the pursuer's velocity toward the evader
         p_u = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
         los = self.evader_pos - self.pursuer_pos
@@ -411,7 +389,6 @@ class PursuitEvasionEnv(gym.Env):
             r_p_terminal
             + shaping_reward
             + closer_bonus
-            + angle_bonus
             + heading_bonus
             + align_bonus
             - 0.001
@@ -419,7 +396,6 @@ class PursuitEvasionEnv(gym.Env):
         self._reward_breakdown['terminal'] += r_p_terminal
         self._reward_breakdown['shaping'] += shaping_reward
         self._reward_breakdown['closer'] += closer_bonus
-        self._reward_breakdown['angle'] += angle_bonus
         self._reward_breakdown['heading'] += heading_bonus
         self._reward_breakdown['align'] += align_bonus
         self._reward_breakdown['time'] += -0.001
