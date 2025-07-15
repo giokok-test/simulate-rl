@@ -78,7 +78,7 @@ This will show episode rewards, evaluation results and losses during training.
 When a log directory is set, periodic checkpoints created with
 ``--checkpoint-every`` are stored under ``<log-dir>/checkpoints``.
 The logs also record a breakdown of the pursuer reward into shaping,
-alignment and terminal components as well as the fractions of each
+closer, angle, heading, align and terminal components as well as the fractions of each
 termination type aggregated over ``training.outcome_window`` episodes.
 When running multiple environments in parallel the average minimum
 distance to the evader and mean episode length are logged under
@@ -276,7 +276,7 @@ interval.
 Both `pursuit_evasion.py` and `train_pursuer_ppo.py` load the configuration
 at runtime, so changes take effect the next time you run the script.
 The reward shaping parameters `shaping_weight`, `closer_weight`,
-`angle_weight` and `heading_weight` can be adjusted
+`angle_weight`, `heading_weight` and `align_weight` can be adjusted
 here as well to encourage desired
 behaviour. The `separation_cutoff_factor` option defines a multiplier of
 the initial pursuer--evader distance that ends the episode when the

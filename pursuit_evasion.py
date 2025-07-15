@@ -189,6 +189,8 @@ class PursuitEvasionEnv(gym.Env):
         # Reward for reducing the difference between the pursuer and
         # evader headings from one step to the next.
         self.heading_weight = self.cfg.get('heading_weight', 0.0)
+        # Bonus for directly pointing the pursuer toward the evader.
+        self.align_weight = self.cfg.get('align_weight', 0.0)
         self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
         # maximum allowed separation before the episode ends
         self.cutoff_factor = self.cfg.get('separation_cutoff_factor', 2.0)
@@ -316,6 +318,7 @@ class PursuitEvasionEnv(gym.Env):
             'closer': 0.0,
             'angle': 0.0,
             'heading': 0.0,
+            'align': 0.0,
             'time': 0.0,
         }
         # metrics for episode statistics
@@ -392,6 +395,11 @@ class PursuitEvasionEnv(gym.Env):
                 self.prev_heading_angle - head_ang
             )
         self.prev_heading_angle = head_ang
+        # Bonus for pointing the pursuer's velocity toward the evader
+        p_u = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
+        los = self.evader_pos - self.pursuer_pos
+        los_u = los / (np.linalg.norm(los) + 1e-8)
+        align_bonus = self.align_weight * float(np.dot(p_u, los_u))
 
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
@@ -405,6 +413,7 @@ class PursuitEvasionEnv(gym.Env):
             + closer_bonus
             + angle_bonus
             + heading_bonus
+            + align_bonus
             - 0.001
         )
         self._reward_breakdown['terminal'] += r_p_terminal
@@ -412,6 +421,7 @@ class PursuitEvasionEnv(gym.Env):
         self._reward_breakdown['closer'] += closer_bonus
         self._reward_breakdown['angle'] += angle_bonus
         self._reward_breakdown['heading'] += heading_bonus
+        self._reward_breakdown['align'] += align_bonus
         self._reward_breakdown['time'] += -0.001
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
