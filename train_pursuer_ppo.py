@@ -698,6 +698,21 @@ def train(
                     info.get("pursuer_pitch_diff", float("nan")),
                     episode_counter,
                 )
+                writer.add_scalar(
+                    "train/cone_time",
+                    info.get("cone_calc_time", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "batch/cone_time",
+                    info.get("cone_calc_time", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "episode/cone_time",
+                    info.get("cone_calc_time", float("nan")),
+                    episode_counter,
+                )
                 rb = info.get("reward_breakdown", {})
                 for k, v in rb.items():
                     scalar_reward = float(v)
@@ -814,6 +829,11 @@ def train(
                             float(inf.get("pursuer_pitch_delta", float("nan"))),
                             episode_counter + i,
                         )
+                        writer.add_scalar(
+                            "episode/cone_time",
+                            float(inf.get("cone_calc_time", float("nan"))),
+                            episode_counter + i,
+                        )
                 rb_sum = defaultdict(float)
                 n_info = 0
                 min_list = []
@@ -824,6 +844,7 @@ def train(
                 pitch_list = []
                 yaw_diff_list = []
                 pitch_diff_list = []
+                cone_time_list = []
                 for inf in infos:
                     if inf:
                         n_info += 1
@@ -859,6 +880,8 @@ def train(
                             yaw_diff_list.append(inf["pursuer_yaw_diff"])
                         if "pursuer_pitch_diff" in inf:
                             pitch_diff_list.append(inf["pursuer_pitch_diff"])
+                        if "cone_calc_time" in inf:
+                            cone_time_list.append(inf["cone_calc_time"])
                 if n_info:
                     for k, v in rb_sum.items():
                         avg = v / n_info
@@ -892,6 +915,9 @@ def train(
                     if pitch_diff_list:
                         writer.add_scalar("train/pitch_diff", float(np.mean(pitch_diff_list)), episode)
                         writer.add_scalar("batch/pitch_diff", float(np.mean(pitch_diff_list)), episode)
+                    if cone_time_list:
+                        writer.add_scalar("train/cone_time", float(np.mean(cone_time_list)), episode)
+                        writer.add_scalar("batch/cone_time", float(np.mean(cone_time_list)), episode)
                     if min_list and start_list:
                         ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
                         if ratios:

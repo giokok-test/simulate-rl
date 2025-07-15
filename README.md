@@ -96,6 +96,9 @@ acceleration, yaw and pitch for each episode as ``train/acc_delta``,
 are written for every environment under the ``episode/`` namespace.
 The difference between the starting and final pursuer orientation is logged as
 ``train/yaw_diff`` and ``train/pitch_diff``.
+The time spent computing the capture cone reward is recorded under
+``train/cone_time`` and ``batch/cone_time`` with per-episode values in
+``episode/cone_time``.
 Every ``training.outcome_window`` episodes the script also prints the
 number of occurrences of each termination reason so you can quickly see
 how episodes are ending.

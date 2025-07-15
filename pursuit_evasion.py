@@ -5,6 +5,7 @@ import gymnasium as gym
 import yaml
 import os
 import copy
+import time
 
 
 def load_config(path: str | None = None) -> dict:
@@ -331,6 +332,7 @@ class PursuitEvasionEnv(gym.Env):
         self.pursuer_acc_delta = 0.0
         self.pursuer_yaw_delta = 0.0
         self.pursuer_pitch_delta = 0.0
+        self.cone_calc_time = 0.0
         # store previous positions to detect capture between steps
         self.prev_pursuer_pos = self.pursuer_pos.copy()
         self.prev_evader_pos = self.evader_pos.copy()
@@ -404,6 +406,7 @@ class PursuitEvasionEnv(gym.Env):
         self.prev_heading_angle = head_ang
 
         cone_bonus = 0.0
+        t0 = time.perf_counter()
         if self.capture_cone_weight > 0.0:
             prev_vec = prev_e_pos - prev_p_pos
             prev_cone = np.arcsin(
@@ -424,6 +427,7 @@ class PursuitEvasionEnv(gym.Env):
             self.prev_cone_aligned = angle <= np.arcsin(
                 min(1.0, self.cfg['capture_radius'] / (dist_pe + 1e-8))
             )
+        self.cone_calc_time += time.perf_counter() - t0
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
 
@@ -493,6 +497,7 @@ class PursuitEvasionEnv(gym.Env):
                 np.arctan2(np.sin(e_yaw - self.init_evader_yaw), np.cos(e_yaw - self.init_evader_yaw))
             )
             info['evader_pitch_diff'] = float(e_pitch - self.init_evader_pitch)
+            info['cone_calc_time'] = float(self.cone_calc_time)
         # update stored previous positions for next step
         self.prev_pursuer_pos = prev_p_pos
         self.prev_evader_pos = prev_e_pos
