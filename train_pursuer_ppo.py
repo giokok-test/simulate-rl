@@ -274,6 +274,7 @@ def train(
     resume_from: str | None = None,
     log_dir: str | None = None,
     num_envs: int = 8,
+    profile: bool = False,
 ):
     """Train the pursuer policy using PPO.
 
@@ -293,6 +294,10 @@ def train(
     num_envs:
         Number of parallel environments to run. Values greater than one use a
         vectorised environment for faster data collection.
+    profile:
+        Measure time spent collecting rollouts, optimising and evaluating. The
+        timings are printed and logged to TensorBoard when a ``log_dir`` is
+        provided.
     """
 
     training_cfg = cfg.get('training', {})
@@ -391,6 +396,8 @@ def train(
                     apply_curriculum(e.env.cfg, start_cur, end_cur, progress)
                 if writer:
                     _log_curriculum(writer, env.envs[0].env.cfg, start_cur, end_cur, episode)
+        if profile:
+            collect_start = time.perf_counter()
         if num_envs == 1:
             obs, _ = env.reset()
             init_pursuer_pos = env.env.pursuer_pos.copy()
@@ -443,6 +450,9 @@ def train(
             obs_batch = torch.stack(obs_list)
             action_batch = torch.stack(actions)
             old_log_probs = torch.stack(log_probs)
+            if profile:
+                collect_time = time.perf_counter() - collect_start
+                update_start = time.perf_counter()
 
         else:
             obs, _ = env.reset()
@@ -521,6 +531,9 @@ def train(
             obs_batch = torch.cat(obs_stack)
             action_batch = torch.cat(action_stack)
             old_log_probs = torch.cat(log_list)
+            if profile:
+                collect_time = time.perf_counter() - collect_start
+                update_start = time.perf_counter()
 
         for _ in range(ppo_epochs):
             mean, value = model(obs_batch)
@@ -540,6 +553,8 @@ def train(
             optimizer.step()
         if scheduler:
             scheduler.step()
+        if profile:
+            update_time = time.perf_counter() - update_start
 
         if writer:
             writer.add_scalar("train/loss", loss.item(), episode)
@@ -901,8 +916,17 @@ def train(
         if writer:
             eps_sec = episode_counter / max(time.perf_counter() - start_time, 1e-8)
             writer.add_scalar("timing/episodes_per_sec", eps_sec, episode)
+            if profile:
+                writer.add_scalar("timing/collect", collect_time, episode)
+                writer.add_scalar("timing/update", update_time, episode)
+        if profile:
+            print(
+                f"Episode {episode+1}: collect={collect_time:.3f}s update={update_time:.3f}s"
+            )
 
         if (episode + 1) % eval_freq == 0:
+            if profile:
+                eval_start = time.perf_counter()
             eval_cfg = copy.deepcopy(cfg)
             if start_cur and end_cur:
                 # Use final curriculum parameters when evaluating to track
@@ -913,9 +937,15 @@ def train(
             print(
                 f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}"
             )
+            if profile:
+                eval_time = time.perf_counter() - eval_start
             if writer:
                 writer.add_scalar("eval/avg_reward", avg_r, episode)
                 writer.add_scalar("eval/success_rate", success, episode)
+                if profile:
+                    writer.add_scalar("timing/eval", eval_time, episode)
+            if profile:
+                print(f"Evaluation time: {eval_time:.3f}s")
                 if (
                     reward_threshold > 0
                     and not efficiency_logged
@@ -1011,6 +1041,11 @@ if __name__ == "__main__":
         type=int,
         default=8,
         help="number of parallel environments",
+    )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="measure time spent in major training phases",
     )
     parser.add_argument("--gamma", type=float, help="discount factor")
     parser.add_argument("--clip-ratio", type=float, help="PPO clipping ratio")
@@ -1129,4 +1164,5 @@ if __name__ == "__main__":
         resume_from=args.resume_from,
         log_dir=args.log_dir,
         num_envs=args.num_envs,
+        profile=args.profile,
     )

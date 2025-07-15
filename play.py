@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import torch
+import time
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -53,7 +54,13 @@ def draw_spawn_volume(
     # region remains visible without the heavy meshes.
 
 
-def run_episode(model_path: str, max_steps: int | None = None) -> None:
+def run_episode(model_path: str, max_steps: int | None = None, profile: bool = False) -> None:
+    """Run one episode using ``model_path``.
+
+    When ``profile`` is ``True`` the function records how much time is spent
+    on inference, environment stepping and plotting before printing a summary.
+    """
+
     cfg = load_config()
     cfg['evader']['awareness_mode'] = 1
     env = PursuerOnlyEnv(cfg, max_steps=max_steps)
@@ -66,6 +73,10 @@ def run_episode(model_path: str, max_steps: int | None = None) -> None:
     model.eval()
 
     obs, _ = env.reset()
+    if profile:
+        total_start = time.perf_counter()
+        infer_time = 0.0
+        step_time = 0.0
     # store initial state before stepping
     p_init_dir = env.env.pursuer_force_dir.copy()
     e_init_dir = env.env.evader_force_dir.copy()
@@ -95,13 +106,20 @@ def run_episode(model_path: str, max_steps: int | None = None) -> None:
     step = 0
     target_pos = np.asarray(env.env.cfg["target_position"], dtype=float)
     while not done:
+        if profile:
+            t0 = time.perf_counter()
         with torch.no_grad():
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
             mean, _ = model(obs_t)
             std = model.std.expand_as(mean)
             dist = torch.distributions.Normal(mean, std)
             action = dist.mean
+        if profile:
+            infer_time += time.perf_counter() - t0
+            t0 = time.perf_counter()
         obs, r, done, _, info = env.step(action.cpu().numpy())
+        if profile:
+            step_time += time.perf_counter() - t0
         pursuer_traj.append(env.env.pursuer_pos.copy())
         evader_traj.append(env.env.evader_pos.copy())
         # compute vectors and velocities for table output
@@ -155,6 +173,8 @@ def run_episode(model_path: str, max_steps: int | None = None) -> None:
             )
 
     # Plot the trajectories in 3D
+    if profile:
+        plot_start = time.perf_counter()
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
 
@@ -284,6 +304,13 @@ def run_episode(model_path: str, max_steps: int | None = None) -> None:
         ax.set_ylim(centers[1] - radius, centers[1] + radius)
         ax.set_zlim(centers[2] - radius, centers[2] + radius)
     plt.show()
+    if profile:
+        plot_time = time.perf_counter() - plot_start
+        total_time = time.perf_counter() - total_start
+        print(
+            f"timings: inference={infer_time:.3f}s env_step={step_time:.3f}s "
+            f"plot={plot_time:.3f}s total={total_time:.3f}s"
+        )
 
 
 if __name__ == "__main__":
@@ -299,6 +326,11 @@ if __name__ == "__main__":
         default=None,
         help="override maximum episode steps",
     )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="print timing information",
+    )
     args = parser.parse_args()
 
-    run_episode(args.model, max_steps=args.steps)
+    run_episode(args.model, max_steps=args.steps, profile=args.profile)
