@@ -157,9 +157,12 @@ class PursuerOnlyEnv(gym.Env):
         )
         info.setdefault('start_distance', float(self.env.start_pe_dist))
         r_p = float(reward['pursuer'])
+        timing_bonus = 0.0
         if done and info.get('outcome') == 'capture':
             steps = info.get('episode_steps', self.cur_step + 1)
-            r_p += self.capture_bonus * (self.max_steps - steps)
+            timing_bonus = self.capture_bonus * (self.max_steps - steps)
+            r_p += timing_bonus
+        info['timing_bonus'] = timing_bonus
         self.cur_step += 1
         if self.cur_step >= self.max_steps and not done:
             done = True
@@ -669,6 +672,21 @@ def train(
                     episode_counter,
                 )
                 writer.add_scalar(
+                    "train/vel_delta",
+                    info.get("pursuer_vel_delta", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "batch/vel_delta",
+                    info.get("pursuer_vel_delta", float("nan")),
+                    episode,
+                )
+                writer.add_scalar(
+                    "episode/vel_delta",
+                    info.get("pursuer_vel_delta", float("nan")),
+                    episode_counter,
+                )
+                writer.add_scalar(
                     "train/yaw_diff",
                     info.get("pursuer_yaw_diff", float("nan")),
                     episode,
@@ -814,6 +832,11 @@ def train(
                             float(inf.get("pursuer_pitch_delta", float("nan"))),
                             episode_counter + i,
                         )
+                        writer.add_scalar(
+                            "episode/vel_delta",
+                            float(inf.get("pursuer_vel_delta", float("nan"))),
+                            episode_counter + i,
+                        )
                 rb_sum = defaultdict(float)
                 n_info = 0
                 min_list = []
@@ -822,6 +845,7 @@ def train(
                 acc_list = []
                 yaw_list = []
                 pitch_list = []
+                vel_list = []
                 yaw_diff_list = []
                 pitch_diff_list = []
                 for inf in infos:
@@ -855,6 +879,8 @@ def train(
                             yaw_list.append(inf["pursuer_yaw_delta"])
                         if "pursuer_pitch_delta" in inf:
                             pitch_list.append(inf["pursuer_pitch_delta"])
+                        if "pursuer_vel_delta" in inf:
+                            vel_list.append(inf["pursuer_vel_delta"])
                         if "pursuer_yaw_diff" in inf:
                             yaw_diff_list.append(inf["pursuer_yaw_diff"])
                         if "pursuer_pitch_diff" in inf:
@@ -886,6 +912,9 @@ def train(
                     if pitch_list:
                         writer.add_scalar("train/pitch_delta", float(np.mean(pitch_list)), episode)
                         writer.add_scalar("batch/pitch_delta", float(np.mean(pitch_list)), episode)
+                    if vel_list:
+                        writer.add_scalar("train/vel_delta", float(np.mean(vel_list)), episode)
+                        writer.add_scalar("batch/vel_delta", float(np.mean(vel_list)), episode)
                     if yaw_diff_list:
                         writer.add_scalar("train/yaw_diff", float(np.mean(yaw_diff_list)), episode)
                         writer.add_scalar("batch/yaw_diff", float(np.mean(yaw_diff_list)), episode)

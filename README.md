@@ -92,7 +92,8 @@ under ``batch/``. A ``timing/episodes_per_sec`` metric tracks how many
 episodes are processed per second of wall time.
 The logger also records the cumulative change in the pursuer's commanded
 acceleration, yaw and pitch for each episode as ``train/acc_delta``,
-``train/yaw_delta`` and ``train/pitch_delta``. These per-episode totals
+``train/yaw_delta`` and ``train/pitch_delta``. The total change in
+velocity is logged as ``train/vel_delta``. These per-episode totals
 are written for every environment under the ``episode/`` namespace.
 The difference between the starting and final pursuer orientation is logged as
 ``train/yaw_diff`` and ``train/pitch_diff``.
@@ -285,7 +286,8 @@ pursuer receives `separation_penalty` as a terminal reward.
 The `capture_bonus` setting adds a time incentive for the pursuer by
 increasing its terminal reward when a capture occurs earlier. The final
 reward becomes `1 + capture_bonus * (max_steps - episode_steps)` where
-`max_steps` is the episode length limit.
+`max_steps` is the episode length limit. This bonus is awarded only when
+the pursuer actually captures the evader.
 
 The `evader.awareness_mode` option defines how much information the
 evader receives about the pursuer:
