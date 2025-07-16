@@ -324,6 +324,7 @@ class PursuitEvasionEnv(gym.Env):
         self.pursuer_acc_delta = 0.0
         self.pursuer_yaw_delta = 0.0
         self.pursuer_pitch_delta = 0.0
+        self.pursuer_vel_delta = 0.0
         # store previous positions to detect capture between steps
         self.prev_pursuer_pos = self.pursuer_pos.copy()
         self.prev_evader_pos = self.evader_pos.copy()
@@ -354,8 +355,10 @@ class PursuitEvasionEnv(gym.Env):
         prev_p_pos = self.pursuer_pos.copy()
         prev_e_pos = self.evader_pos.copy()
         prev_dir = self.pursuer_force_dir.copy()
+        prev_vel = self.pursuer_vel.copy()
         self._update_agent('evader', evader_action)
         self._update_agent('pursuer', pursuer_action)
+        self.pursuer_vel_delta += np.linalg.norm(self.pursuer_vel - prev_vel)
         # shaping rewards based on change in distances
         dist_pe = np.linalg.norm(self.evader_pos - self.pursuer_pos)
         target = np.array(self.cfg['target_position'], dtype=np.float32)
@@ -431,6 +434,7 @@ class PursuitEvasionEnv(gym.Env):
             info['pursuer_acc_delta'] = float(self.pursuer_acc_delta)
             info['pursuer_yaw_delta'] = float(self.pursuer_yaw_delta)
             info['pursuer_pitch_delta'] = float(self.pursuer_pitch_delta)
+            info['pursuer_vel_delta'] = float(self.pursuer_vel_delta)
             # difference between starting and final orientation of both agents
             p_yaw = np.arctan2(self.pursuer_force_dir[1], self.pursuer_force_dir[0])
             p_pitch = np.arctan2(
