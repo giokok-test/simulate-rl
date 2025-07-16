@@ -574,8 +574,9 @@ def train(
                 print(row)
             episode_reward = sum(rewards)
             if writer:
+                batch_step = episode_counter + 1
                 writer.add_scalar("train/episode_reward", episode_reward, episode)
-                writer.add_scalar("batch/episode_reward", episode_reward, episode)
+                writer.add_scalar("batch/episode_reward", episode_reward, batch_step)
                 writer.add_scalar("episode/reward", episode_reward, episode_counter)
                 if info:
                     writer.add_scalar(
@@ -586,7 +587,7 @@ def train(
                     writer.add_scalar(
                         "batch/min_distance",
                         info.get("min_distance", float("nan")),
-                        episode,
+                        batch_step,
                     )
                     writer.add_scalar(
                         "episode/min_distance",
@@ -601,7 +602,7 @@ def train(
                 writer.add_scalar(
                     "batch/episode_length",
                     info.get("episode_steps", step),
-                    episode,
+                    batch_step,
                 )
                 writer.add_scalar(
                     "episode/length",
@@ -619,7 +620,7 @@ def train(
                     writer.add_scalar(
                         "batch/min_start_ratio",
                         float(min_d) / float(start_d),
-                        episode,
+                        batch_step,
                     )
                     writer.add_scalar(
                         "episode/min_start_ratio",
@@ -634,7 +635,7 @@ def train(
                 writer.add_scalar(
                     "batch/acc_delta",
                     info.get("pursuer_acc_delta", float("nan")),
-                    episode,
+                    batch_step,
                 )
                 writer.add_scalar(
                     "episode/acc_delta",
@@ -649,7 +650,7 @@ def train(
                 writer.add_scalar(
                     "batch/yaw_delta",
                     info.get("pursuer_yaw_delta", float("nan")),
-                    episode,
+                    batch_step,
                 )
                 writer.add_scalar(
                     "episode/yaw_delta",
@@ -664,7 +665,7 @@ def train(
                 writer.add_scalar(
                     "batch/pitch_delta",
                     info.get("pursuer_pitch_delta", float("nan")),
-                    episode,
+                    batch_step,
                 )
                 writer.add_scalar(
                     "episode/pitch_delta",
@@ -679,7 +680,7 @@ def train(
                 writer.add_scalar(
                     "batch/vel_delta",
                     info.get("pursuer_vel_delta", float("nan")),
-                    episode,
+                    batch_step,
                 )
                 writer.add_scalar(
                     "episode/vel_delta",
@@ -694,7 +695,7 @@ def train(
                 writer.add_scalar(
                     "batch/yaw_diff",
                     info.get("pursuer_yaw_diff", float("nan")),
-                    episode,
+                    batch_step,
                 )
                 writer.add_scalar(
                     "episode/yaw_diff",
@@ -709,7 +710,7 @@ def train(
                 writer.add_scalar(
                     "batch/pitch_diff",
                     info.get("pursuer_pitch_diff", float("nan")),
-                    episode,
+                    batch_step,
                 )
                 writer.add_scalar(
                     "episode/pitch_diff",
@@ -763,8 +764,9 @@ def train(
             episode_reward = sum(sum(r) for r in rewards) / num_envs
             episode_outcomes = defaultdict(int)
             if writer:
+                batch_step = episode_counter + num_envs
                 writer.add_scalar("train/episode_reward", episode_reward, episode)
-                writer.add_scalar("batch/episode_reward", episode_reward, episode)
+                writer.add_scalar("batch/episode_reward", episode_reward, batch_step)
                 for i in range(num_envs):
                     env_r = sum(rewards[i])
                     writer.add_scalar(
@@ -781,7 +783,7 @@ def train(
                     writer.add_scalar(
                         "batch/min_distance",
                         float(np.nanmean(md_vals)),
-                        episode,
+                        batch_step,
                     )
                 for i, inf in enumerate(infos):
                     if inf and "min_distance" in inf:
@@ -799,7 +801,7 @@ def train(
                     writer.add_scalar(
                         "batch/episode_length",
                         float(np.nanmean(step_vals)),
-                        episode,
+                        batch_step,
                     )
                 for i, inf in enumerate(infos):
                     if inf and "episode_steps" in inf:
@@ -899,33 +901,33 @@ def train(
                             writer.add_scalar(f"episode/reward_{k}", scalar, episode_counter + i)
                     if min_list:
                         writer.add_scalar("train/min_distance", float(np.mean(min_list)), episode)
-                        writer.add_scalar("batch/min_distance", float(np.mean(min_list)), episode)
+                        writer.add_scalar("batch/min_distance", float(np.mean(min_list)), batch_step)
                     if len_list:
                         writer.add_scalar("train/episode_length", float(np.mean(len_list)), episode)
-                        writer.add_scalar("batch/episode_length", float(np.mean(len_list)), episode)
+                        writer.add_scalar("batch/episode_length", float(np.mean(len_list)), batch_step)
                     if acc_list:
                         writer.add_scalar("train/acc_delta", float(np.mean(acc_list)), episode)
-                        writer.add_scalar("batch/acc_delta", float(np.mean(acc_list)), episode)
+                        writer.add_scalar("batch/acc_delta", float(np.mean(acc_list)), batch_step)
                     if yaw_list:
                         writer.add_scalar("train/yaw_delta", float(np.mean(yaw_list)), episode)
-                        writer.add_scalar("batch/yaw_delta", float(np.mean(yaw_list)), episode)
+                        writer.add_scalar("batch/yaw_delta", float(np.mean(yaw_list)), batch_step)
                     if pitch_list:
                         writer.add_scalar("train/pitch_delta", float(np.mean(pitch_list)), episode)
-                        writer.add_scalar("batch/pitch_delta", float(np.mean(pitch_list)), episode)
+                        writer.add_scalar("batch/pitch_delta", float(np.mean(pitch_list)), batch_step)
                     if vel_list:
                         writer.add_scalar("train/vel_delta", float(np.mean(vel_list)), episode)
-                        writer.add_scalar("batch/vel_delta", float(np.mean(vel_list)), episode)
+                        writer.add_scalar("batch/vel_delta", float(np.mean(vel_list)), batch_step)
                     if yaw_diff_list:
                         writer.add_scalar("train/yaw_diff", float(np.mean(yaw_diff_list)), episode)
-                        writer.add_scalar("batch/yaw_diff", float(np.mean(yaw_diff_list)), episode)
+                        writer.add_scalar("batch/yaw_diff", float(np.mean(yaw_diff_list)), batch_step)
                     if pitch_diff_list:
                         writer.add_scalar("train/pitch_diff", float(np.mean(pitch_diff_list)), episode)
-                        writer.add_scalar("batch/pitch_diff", float(np.mean(pitch_diff_list)), episode)
+                        writer.add_scalar("batch/pitch_diff", float(np.mean(pitch_diff_list)), batch_step)
                     if min_list and start_list:
                         ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
                         if ratios:
                             writer.add_scalar("train/min_start_ratio", float(np.mean(ratios)), episode)
-                            writer.add_scalar("batch/min_start_ratio", float(np.mean(ratios)), episode)
+                            writer.add_scalar("batch/min_start_ratio", float(np.mean(ratios)), batch_step)
                 # per-environment min_start_ratio logged earlier
                 episode_counter += num_envs
                 if (episode + 1) % outcome_window == 0:
@@ -944,7 +946,7 @@ def train(
 
         if writer:
             eps_sec = episode_counter / max(time.perf_counter() - start_time, 1e-8)
-            writer.add_scalar("timing/episodes_per_sec", eps_sec, episode)
+            writer.add_scalar("timing/episodes_per_sec", eps_sec, episode_counter)
             if profile:
                 writer.add_scalar("timing/collect", collect_time, episode)
                 writer.add_scalar("timing/update", update_time, episode)
