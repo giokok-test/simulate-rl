@@ -31,11 +31,11 @@ training:
   # next curriculum stage when ``curriculum_mode`` is "adaptive".
   success_threshold: 0.6
   # Window size used to compute the adaptive success rate.
-  curriculum_window: 256
+  curriculum_window: 64
   # Number of discrete curriculum stages including the final environment.
   # If set to ``N`` there will be ``N - 1`` transitions from ``curriculum.start``
   # to ``curriculum.end`` over the course of training.
-  curriculum_stages: 20
+  curriculum_stages: 1200
   # PPO algorithm parameters
   gamma: 0.99
   clip_ratio: 0.2

@@ -834,6 +834,26 @@ def train(
                         avg = v / n_info
                         scalar_reward = float(avg.item() if hasattr(avg, "item") else avg)
                         writer.add_scalar(f"batch/reward_{k}", scalar_reward, episode)
+                if min_list:
+                    writer.add_scalar("batch/min_distance", float(np.mean(min_list)), batch_step)
+                if len_list:
+                    writer.add_scalar("batch/episode_length", float(np.mean(len_list)), batch_step)
+                if acc_list:
+                    writer.add_scalar("batch/acc_delta", float(np.mean(acc_list)), batch_step)
+                if yaw_list:
+                    writer.add_scalar("batch/yaw_delta", float(np.mean(yaw_list)), batch_step)
+                if pitch_list:
+                    writer.add_scalar("batch/pitch_delta", float(np.mean(pitch_list)), batch_step)
+                if vel_list:
+                    writer.add_scalar("batch/vel_delta", float(np.mean(vel_list)), batch_step)
+                if yaw_diff_list:
+                    writer.add_scalar("batch/yaw_diff", float(np.mean(yaw_diff_list)), batch_step)
+                if pitch_diff_list:
+                    writer.add_scalar("batch/pitch_diff", float(np.mean(pitch_diff_list)), batch_step)
+                if min_list and start_list:
+                    ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
+                    if ratios:
+                        writer.add_scalar("batch/min_start_ratio", float(np.mean(ratios)), batch_step)
                 for i, inf in enumerate(infos):
                     if inf:
                         rb_env = inf.get("reward_breakdown", {})
@@ -841,26 +861,6 @@ def train(
                             arr = np.asarray(v)
                             scalar = float(arr.mean())  # or .sum() if you’d rather aggregate that way
                             writer.add_scalar(f"episode/reward_{k}", scalar, episode_counter + i)
-                    if min_list:
-                        writer.add_scalar("batch/min_distance", float(np.mean(min_list)), batch_step)
-                    if len_list:
-                        writer.add_scalar("batch/episode_length", float(np.mean(len_list)), batch_step)
-                    if acc_list:
-                        writer.add_scalar("batch/acc_delta", float(np.mean(acc_list)), batch_step)
-                    if yaw_list:
-                        writer.add_scalar("batch/yaw_delta", float(np.mean(yaw_list)), batch_step)
-                    if pitch_list:
-                        writer.add_scalar("batch/pitch_delta", float(np.mean(pitch_list)), batch_step)
-                    if vel_list:
-                        writer.add_scalar("batch/vel_delta", float(np.mean(vel_list)), batch_step)
-                    if yaw_diff_list:
-                        writer.add_scalar("batch/yaw_diff", float(np.mean(yaw_diff_list)), batch_step)
-                    if pitch_diff_list:
-                        writer.add_scalar("batch/pitch_diff", float(np.mean(pitch_diff_list)), batch_step)
-                    if min_list and start_list:
-                        ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
-                        if ratios:
-                            writer.add_scalar("batch/min_start_ratio", float(np.mean(ratios)), batch_step)
                 # per-environment min_start_ratio logged earlier
                 episode_counter += num_envs
                 if (episode + 1) % outcome_window == 0:
