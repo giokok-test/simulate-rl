@@ -87,9 +87,11 @@ The ratio between the closest approach and the initial pursuer--evader
 distance is stored as ``train/min_start_ratio`` to help gauge how much
 closer the pursuer gets relative to the spawn distance.  Individual
 episode statistics for each environment are written under the
-``episode/`` namespace, while the mean values for the batch are logged
-under ``batch/``. A ``timing/episodes_per_sec`` metric tracks how many
-episodes are processed per second of wall time.
+``episode/`` namespace. The mean values for the batch use the cumulative
+episode counter as ``batch_step`` and are logged under ``batch/`` so the
+curves progress monotonically even with multiple environments. The
+``timing/episodes_per_sec`` metric now shares this counter to report how
+many episodes are processed per second of wall time.
 The logger also records the cumulative change in the pursuer's commanded
 acceleration, yaw and pitch for each episode as ``train/acc_delta``,
 ``train/yaw_delta`` and ``train/pitch_delta``. The total change in
