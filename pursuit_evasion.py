@@ -178,6 +178,7 @@ class PursuitEvasionEnv(gym.Env):
         # Make a copy so we can modify units without affecting the caller
         self.cfg = copy.deepcopy(cfg)
         self.dt = self.cfg['time_step']
+        self.capture_bonus = self.cfg.get('capture_bonus', 10)
         self.shaping_weight = self.cfg.get('shaping_weight', 0.05)
         # Additional shaping when the pursuer decreases its distance to the
         # evader between consecutive steps. This complements the basic shaping
@@ -431,6 +432,7 @@ class PursuitEvasionEnv(gym.Env):
             info['reward_breakdown'] = {
                 k: float(v) for k, v in self._reward_breakdown.items()
             }
+            #print(info['reward_breakdown'], "reward breakdown")
             info['pursuer_acc_delta'] = float(self.pursuer_acc_delta)
             info['pursuer_yaw_delta'] = float(self.pursuer_yaw_delta)
             info['pursuer_pitch_delta'] = float(self.pursuer_pitch_delta)
@@ -608,7 +610,8 @@ class PursuitEvasionEnv(gym.Env):
                     cross_capture = True
 
         if dist <= self.cfg['capture_radius'] or cross_capture:
-            return True, -1.0, 1.0, 'capture'
+            bonus = self.capture_bonus
+            return True, -1.0, bonus, 'capture'
         if dist_target_xy <= success_thresh and self.evader_pos[2] > 0.0:
             return True, 1.0, 0.0, 'evader_success'
         if dist >= self.cutoff_factor * self.start_pe_dist:

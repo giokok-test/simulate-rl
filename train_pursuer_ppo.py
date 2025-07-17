@@ -476,22 +476,44 @@ def train(
                 log_prob = dist.log_prob(action).sum(dim=1)
                 next_obs, r, d, _, info = env.step(action.cpu().numpy())
                 if isinstance(info, dict):
-                    # info is something like {'episode_steps': array([ 12,  34, ...]),
-                    #                        'min_distance': array([10.2,  5.6, ...]), ...}
                     info_list = []
                     for idx in range(num_envs):
                         single = {}
                         for key, val in info.items():
-                            # if val is array-like, index it; otherwise, copy directly
-                            if hasattr(val, "__len__") and not isinstance(val, dict):
+                            if isinstance(val, dict):
+                                nested = {}
+                                # build a boolean mask of which envs just terminated
+                                mask = np.asarray(val.get('_terminal', []), dtype=bool)
+
+                                for subk, subv in val.items():
+                                    arr = np.asarray(subv)
+
+                                    if mask.size and mask.any():
+                                        # select only the entries where _terminal is True
+                                        sel = arr[mask]
+                                        # convert to Python scalars and store as a list
+                                        # (if sel is a single-element array, this still gives a 1‑element list)
+                                        nested[subk] = [x.item() if isinstance(x, np.generic) else x for x in sel]
+                                    else:
+                                        # no terminal flag or no env just finished → empty list
+                                        nested[subk] = []
+
+                                single[key] = nested
+
+                            # 2) otherwise if it's an array or list, index it
+                            elif hasattr(val, "__len__") and not isinstance(val, str):
                                 try:
                                     single[key] = val[idx]
                                 except Exception:
-                                    single[key] = val         # fallback if indexing fails
+                                    single[key] = val
+
+                            # 3) else just copy the scalar
                             else:
-                                single[key] = val             # nested dicts, scalars, etc.
+                                single[key] = val
+
                         info_list.append(single)
                 else:
+                    # if gym already gave you a list of dicts, just use it
                     info_list = info
                 for i in range(num_envs):
                     if not done[i]:
@@ -502,7 +524,10 @@ def train(
                         actions[i].append(action[i])
                     if d[i] and infos[i] is None:
                         # now pull from our per-env dict
-                        infos[i] = info_list[i]
+                        inf_i = info_list[i]
+                        if inf_i.get('_terminal', True):
+                            infos[i] = inf_i
+
                 done = np.logical_or(done, d)
                 obs = next_obs
                 step += 1
@@ -672,6 +697,7 @@ def train(
                     episode_counter,
                 )
                 rb = info.get("reward_breakdown", {})
+                print("new rb", rb)
                 for k, v in rb.items():
                     scalar_reward = float(v)
                     writer.add_scalar(
@@ -796,6 +822,8 @@ def train(
                     if inf:
                         n_info += 1
                         for k, v in inf.get("reward_breakdown", {}).items():
+                            if k.startswith("_"):
+                                continue
                             arr = np.asarray(v)    
                             scalar = float(arr.mean())
                             rb_sum[k] += scalar
@@ -854,10 +882,13 @@ def train(
                     ratios = [m / s for m, s in zip(min_list, start_list) if s > 0]
                     if ratios:
                         writer.add_scalar("batch/min_start_ratio", float(np.mean(ratios)), batch_step)
+                writer.add_scalar("batch/loss", loss.item(), episode)
                 for i, inf in enumerate(infos):
                     if inf:
                         rb_env = inf.get("reward_breakdown", {})
                         for k, v in rb_env.items():
+                            if k.startswith("_"):
+                                continue
                             arr = np.asarray(v)
                             scalar = float(arr.mean())  # or .sum() if you’d rather aggregate that way
                             writer.add_scalar(f"episode/reward_{k}", scalar, episode_counter + i)
