@@ -131,9 +131,9 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
 class PursuerOnlyEnv(gym.Env):
     """Environment exposing only the pursuer."""
 
-    def __init__(self, cfg: dict, max_steps: int | None = None, capture_bonus: float = 0.0):
+    def __init__(self, cfg: dict, max_steps: int | None = None, capture_bonus: float = 0.0, device: torch.device | None = None):
         super().__init__()
-        self.env = PursuitEvasionEnv(cfg)
+        self.env = PursuitEvasionEnv(cfg, device=device)
         self.observation_space = self.env.observation_space['pursuer']
         self.action_space = self.env.action_space['pursuer']
         if max_steps is None:
@@ -327,12 +327,12 @@ def train(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if num_envs > 1:
         def _make() -> PursuerOnlyEnv:
-            return PursuerOnlyEnv(cfg)
+            return PursuerOnlyEnv(cfg, device=device)
 
         env = gym.vector.SyncVectorEnv([_make for _ in range(num_envs)])
         obs_space = env.single_observation_space
     else:
-        env = PursuerOnlyEnv(cfg)
+        env = PursuerOnlyEnv(cfg, device=device)
         obs_space = env.observation_space
 
     model = ActorCritic(
@@ -928,7 +928,7 @@ def train(
                 # performance in the target environment regardless of the
                 # current training stage.
                 apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
-            avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg))
+            avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg, device=device))
             print(
                 f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}"
             )
@@ -963,7 +963,7 @@ def train(
     eval_cfg = copy.deepcopy(cfg)
     if start_cur and end_cur:
         apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
-    avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg))
+    avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg, device=device))
     print(f"Final performance: avg_reward={avg_r:.2f} success={success:.2f}")
     if writer:
         writer.add_scalar("eval/final_avg_reward", avg_r, num_episodes)
