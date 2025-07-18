@@ -3,7 +3,8 @@
 This repository contains a very small demonstration of a 3D pursuit--evasion
 environment written using `gymnasium`. Two agents (an evader and a pursuer)
 move in a simplified physics world. The provided script trains a pursuer policy
-using Proximal Policy Optimization (PPO).
+using Proximal Policy Optimization (PPO).  All vector calculations inside the
+environment now run on the GPU when one is available for faster simulation.
 
 ## Environment setup
 

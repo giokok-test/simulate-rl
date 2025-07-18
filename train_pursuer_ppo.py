@@ -28,23 +28,27 @@ TABLE_HEADER = "{:>5} | {:>26} | {:>26} | {:>26} | {:>26} | {:>18} | {:>18} | {:
 
 
 def _format_row(step: int, env: PursuitEvasionEnv) -> str:
-    target_pos = np.asarray(env.cfg["target_position"], dtype=float)
+    """Return a formatted row summarising the current simulation state."""
+
+    target_pos = torch.tensor(
+        env.cfg["target_position"], device=env.device, dtype=torch.float32
+    )
     pe_vec = env.evader_pos - env.pursuer_pos
     et_vec = target_pos - env.evader_pos
     pv = env.pursuer_vel
     ev = env.evader_vel
-    pv_u = pv / (np.linalg.norm(pv) + 1e-8)
-    ev_u = ev / (np.linalg.norm(ev) + 1e-8)
-    pe_u = pe_vec / (np.linalg.norm(pe_vec) + 1e-8)
+    pv_u = pv / (torch.norm(pv) + 1e-8)
+    ev_u = ev / (torch.norm(ev) + 1e-8)
+    pe_u = pe_vec / (torch.norm(pe_vec) + 1e-8)
     return (
         f"{step:5d} | "
-        f"[{pe_vec[0]:7.1f} {pe_vec[1]:7.1f} {pe_vec[2]:7.1f}] | "
-        f"[{et_vec[0]:7.1f} {et_vec[1]:7.1f} {et_vec[2]:7.1f}] | "
-        f"[{pv[0]:7.1f} {pv[1]:7.1f} {pv[2]:7.1f}] | "
-        f"[{ev[0]:7.1f} {ev[1]:7.1f} {ev[2]:7.1f}] | "
-        f"[{pv_u[0]:6.2f} {pv_u[1]:6.2f} {pv_u[2]:6.2f}] | "
-        f"[{ev_u[0]:6.2f} {ev_u[1]:6.2f} {ev_u[2]:6.2f}] | "
-        f"[{pe_u[0]:6.2f} {pe_u[1]:6.2f} {pe_u[2]:6.2f}]"
+        f"[{pe_vec[0].item():7.1f} {pe_vec[1].item():7.1f} {pe_vec[2].item():7.1f}] | "
+        f"[{et_vec[0].item():7.1f} {et_vec[1].item():7.1f} {et_vec[2].item():7.1f}] | "
+        f"[{pv[0].item():7.1f} {pv[1].item():7.1f} {pv[2].item():7.1f}] | "
+        f"[{ev[0].item():7.1f} {ev[1].item():7.1f} {ev[2].item():7.1f}] | "
+        f"[{pv_u[0].item():6.2f} {pv_u[1].item():6.2f} {pv_u[2].item():6.2f}] | "
+        f"[{ev_u[0].item():6.2f} {ev_u[1].item():6.2f} {ev_u[2].item():6.2f}] | "
+        f"[{pe_u[0].item():6.2f} {pe_u[1].item():6.2f} {pe_u[2].item():6.2f}]"
     )
 
 from pursuit_evasion import (
@@ -86,34 +90,36 @@ def _format_step(env: PursuerOnlyEnv, step: int, target: np.ndarray) -> str:
     """Return formatted row for the table shown in ``play.py``."""
 
     pe_vec = env.env.evader_pos - env.env.pursuer_pos
-    et_vec = target - env.env.evader_pos
+    et_vec = torch.tensor(target, device=env.env.device, dtype=torch.float32) - env.env.evader_pos
     pv = env.env.pursuer_vel
     ev = env.env.evader_vel
-    pv_u = pv / (np.linalg.norm(pv) + 1e-8)
-    ev_u = ev / (np.linalg.norm(ev) + 1e-8)
-    pe_u = pe_vec / (np.linalg.norm(pe_vec) + 1e-8)
+    pv_u = pv / (torch.norm(pv) + 1e-8)
+    ev_u = ev / (torch.norm(ev) + 1e-8)
+    pe_u = pe_vec / (torch.norm(pe_vec) + 1e-8)
     return (
         f"{step:5d} | "
-        f"[{pe_vec[0]:7.1f} {pe_vec[1]:7.1f} {pe_vec[2]:7.1f}] | "
-        f"[{et_vec[0]:7.1f} {et_vec[1]:7.1f} {et_vec[2]:7.1f}] | "
-        f"[{pv[0]:7.1f} {pv[1]:7.1f} {pv[2]:7.1f}] | "
-        f"[{ev[0]:7.1f} {ev[1]:7.1f} {ev[2]:7.1f}] | "
-        f"[{pv_u[0]:6.2f} {pv_u[1]:6.2f} {pv_u[2]:6.2f}] | "
-        f"[{ev_u[0]:6.2f} {ev_u[1]:6.2f} {ev_u[2]:6.2f}] | "
-        f"[{pe_u[0]:6.2f} {pe_u[1]:6.2f} {pe_u[2]:6.2f}]"
+        f"[{pe_vec[0].item():7.1f} {pe_vec[1].item():7.1f} {pe_vec[2].item():7.1f}] | "
+        f"[{et_vec[0].item():7.1f} {et_vec[1].item():7.1f} {et_vec[2].item():7.1f}] | "
+        f"[{pv[0].item():7.1f} {pv[1].item():7.1f} {pv[2].item():7.1f}] | "
+        f"[{ev[0].item():7.1f} {ev[1].item():7.1f} {ev[2].item():7.1f}] | "
+        f"[{pv_u[0].item():6.2f} {pv_u[1].item():6.2f} {pv_u[2].item():6.2f}] | "
+        f"[{ev_u[0].item():6.2f} {ev_u[1].item():6.2f} {ev_u[2].item():6.2f}] | "
+        f"[{pe_u[0].item():6.2f} {pe_u[1].item():6.2f} {pe_u[2].item():6.2f}]"
     )
 
 
 def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
     """Evader accelerates toward the target with optional dive profile."""
     pos = env.evader_pos
-    target = np.array(env.cfg['target_position'], dtype=np.float32)
+    target = torch.tensor(
+        env.cfg['target_position'], device=env.device, dtype=torch.float32
+    )
     direction = target - pos
-    norm = np.linalg.norm(direction)
+    norm = torch.norm(direction)
     if norm > 1e-8:
         direction /= norm
-    theta = np.arctan2(direction[1], direction[0])
-    phi_target = np.arctan2(direction[2], np.linalg.norm(direction[:2]))
+    theta = torch.atan2(direction[1], direction[0]).item()
+    phi_target = torch.atan2(direction[2], torch.norm(direction[:2])).item()
     mode = env.cfg['evader'].get('trajectory', 'direct')
     if mode == 'dive':
         threshold = env.cfg['evader'].get('dive_angle', 0.0)
@@ -123,7 +129,11 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
             phi = phi_target
     else:
         phi = phi_target
-    phi = np.clip(phi, -env.cfg['evader']['stall_angle'], env.cfg['evader']['stall_angle'])
+    phi = np.clip(
+        phi,
+        -env.cfg['evader']['stall_angle'],
+        env.cfg['evader']['stall_angle'],
+    )
     mag = env.cfg['evader']['max_acceleration']
     return np.array([mag, theta, phi], dtype=np.float32)
 
@@ -131,9 +141,9 @@ def evader_policy(env: PursuitEvasionEnv) -> np.ndarray:
 class PursuerOnlyEnv(gym.Env):
     """Environment exposing only the pursuer."""
 
-    def __init__(self, cfg: dict, max_steps: int | None = None, capture_bonus: float = 0.0):
+    def __init__(self, cfg: dict, max_steps: int | None = None, capture_bonus: float = 0.0, device: torch.device | None = None):
         super().__init__()
-        self.env = PursuitEvasionEnv(cfg)
+        self.env = PursuitEvasionEnv(cfg, device=device)
         self.observation_space = self.env.observation_space['pursuer']
         self.action_space = self.env.action_space['pursuer']
         if max_steps is None:
@@ -168,9 +178,16 @@ class PursuerOnlyEnv(gym.Env):
             done = True
             info.setdefault('episode_steps', self.cur_step)
             info.setdefault('min_distance', float(self.env.min_pe_dist))
-            info.setdefault('final_distance', float(np.linalg.norm(self.env.evader_pos - self.env.pursuer_pos)))
-            target = np.array(self.env.cfg['target_position'], dtype=np.float32)
-            dist_target = np.linalg.norm(self.env.evader_pos - target)
+            info.setdefault(
+                'final_distance',
+                float(torch.norm(self.env.evader_pos - self.env.pursuer_pos))
+            )
+            target = torch.tensor(
+                self.env.cfg['target_position'],
+                dtype=torch.float32,
+                device=self.env.device,
+            )
+            dist_target = torch.norm(self.env.evader_pos - target)
             info.setdefault('evader_to_target', float(dist_target))
             info.setdefault('start_distance', float(self.env.start_pe_dist))
             info['outcome'] = 'timeout'
@@ -327,12 +344,12 @@ def train(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if num_envs > 1:
         def _make() -> PursuerOnlyEnv:
-            return PursuerOnlyEnv(cfg)
+            return PursuerOnlyEnv(cfg, device=device)
 
         env = gym.vector.SyncVectorEnv([_make for _ in range(num_envs)])
         obs_space = env.single_observation_space
     else:
-        env = PursuerOnlyEnv(cfg)
+        env = PursuerOnlyEnv(cfg, device=device)
         obs_space = env.observation_space
 
     model = ActorCritic(
@@ -403,8 +420,8 @@ def train(
             collect_start = time.perf_counter()
         if num_envs == 1:
             obs, _ = env.reset()
-            init_pursuer_pos = env.env.pursuer_pos.copy()
-            init_evader_pos = env.env.evader_pos.copy()
+            init_pursuer_pos = env.env.pursuer_pos.clone()
+            init_evader_pos = env.env.evader_pos.clone()
             done = False
             log_probs = []
             values = []
@@ -928,7 +945,7 @@ def train(
                 # performance in the target environment regardless of the
                 # current training stage.
                 apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
-            avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg))
+            avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg, device=device))
             print(
                 f"Episode {episode+1}: avg_reward={avg_r:.2f} success={success:.2f}"
             )
@@ -963,7 +980,7 @@ def train(
     eval_cfg = copy.deepcopy(cfg)
     if start_cur and end_cur:
         apply_curriculum(eval_cfg, start_cur, end_cur, 1.0)
-    avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg))
+    avg_r, success = evaluate(model, PursuerOnlyEnv(eval_cfg, device=device))
     print(f"Final performance: avg_reward={avg_r:.2f} success={success:.2f}")
     if writer:
         writer.add_scalar("eval/final_avg_reward", avg_r, num_episodes)

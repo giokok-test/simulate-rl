@@ -7,6 +7,8 @@ import os
 import copy
 import time
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def load_config(path: str | None = None) -> dict:
     """Load configuration parameters.
@@ -88,7 +90,7 @@ def apply_curriculum(cfg: dict, start_cfg: dict, end_cfg: dict, progress: float)
             cfg[key] = end_val if progress >= 0.5 else start_val
 
 
-def sample_pursuer_start(evader_pos: np.ndarray, heading: np.ndarray, cfg: dict):
+def sample_pursuer_start(evader_pos: torch.Tensor, heading: torch.Tensor, cfg: dict, device: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Sample initial pursuer state and force direction.
 
     The pursuer spawns inside a truncated cone around the evader. ``heading``
@@ -98,13 +100,13 @@ def sample_pursuer_start(evader_pos: np.ndarray, heading: np.ndarray, cfg: dict)
     params = cfg["pursuer_start"]
     outer = params["cone_half_angle"]
     inner = params.get("inner_cone_half_angle", 0.0)
-    r = np.random.uniform(params["min_range"], params["max_range"])
+    r = float(np.random.uniform(params["min_range"], params["max_range"]))
 
-    base_yaw = np.arctan2(heading[1], heading[0])
+    base_yaw = float(torch.atan2(heading[1], heading[0]))
     if "yaw_range" in params:
         # Angular range is measured relative to directly behind the evader.
         yaw_min, yaw_max = params["yaw_range"]
-        yaw_rel = np.random.uniform(yaw_min, yaw_max)
+        yaw_rel = float(np.random.uniform(yaw_min, yaw_max))
         yaw = (base_yaw + np.pi + yaw_rel) % (2 * np.pi)
     else:
         sections_cfg = params.get(
@@ -123,27 +125,27 @@ def sample_pursuer_start(evader_pos: np.ndarray, heading: np.ndarray, cfg: dict)
             quadrants.append((deg45, deg45 + np.pi / 2))
         if not quadrants:
             raise ValueError("No pursuer spawn sections enabled")
-        yaw_rel = np.random.uniform(*quadrants[np.random.randint(len(quadrants))])
+        yaw_rel = float(np.random.uniform(*quadrants[np.random.randint(len(quadrants))]))
         yaw = (base_yaw + yaw_rel) % (2 * np.pi)
 
-    pitch = np.random.uniform(inner, outer)
+    pitch = float(np.random.uniform(inner, outer))
     # direction from the evader to the pursuer in world coordinates
-    dir_vec = np.array([
+    dir_vec = torch.tensor([
         np.sin(pitch) * np.cos(yaw),
         np.sin(pitch) * np.sin(yaw),
         -np.cos(pitch),
-    ], dtype=np.float32)
+    ], dtype=torch.float32, device=device)
     pos = evader_pos + dir_vec * r
 
     # point the initial force vector toward a random point near the evader
-    tgt_offset = np.random.randn(3).astype(np.float32)
-    tgt_offset /= np.linalg.norm(tgt_offset) + 1e-8
-    tgt_offset *= np.random.uniform(0.0, params['force_target_radius'])
+    tgt_offset = torch.randn(3, device=device)
+    tgt_offset /= tgt_offset.norm() + 1e-8
+    tgt_offset *= float(np.random.uniform(0.0, params['force_target_radius']))
     tgt = evader_pos + tgt_offset
     to_tgt = tgt - pos
-    to_tgt /= np.linalg.norm(to_tgt) + 1e-8
+    to_tgt /= to_tgt.norm() + 1e-8
 
-    speed = np.random.uniform(*params['initial_speed_range'])
+    speed = float(np.random.uniform(*params['initial_speed_range']))
     # initial velocity aligned with the chosen target direction
     vel = to_tgt * speed
     return pos, vel, to_tgt
@@ -164,7 +166,7 @@ class PursuitEvasionEnv(gym.Env):
     goal using ``target_reward_distance`` from the configuration.
     """
 
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict, device: torch.device | None = None):
         """Create the environment.
 
         Parameters
@@ -175,9 +177,10 @@ class PursuitEvasionEnv(gym.Env):
         """
 
         super().__init__()
+        self.device = device if device is not None else DEVICE
         # Make a copy so we can modify units without affecting the caller
         self.cfg = copy.deepcopy(cfg)
-        self.dt = self.cfg['time_step']
+        self.dt = float(self.cfg['time_step'])
         self.capture_bonus = self.cfg.get('capture_bonus', 10)
         self.shaping_weight = self.cfg.get('shaping_weight', 0.05)
         # Additional shaping when the pursuer decreases its distance to the
@@ -259,54 +262,54 @@ class PursuitEvasionEnv(gym.Env):
         start_cfg = self.cfg.get('evader_start', {})
         dmin, dmax = start_cfg.get('distance_range', [0.0, 0.0])
         altitude = start_cfg.get('altitude', 3000.0)
-        target = np.array(self.cfg['target_position'], dtype=np.float32)
-        dist = np.random.uniform(dmin, dmax)
-        ang = np.random.uniform(0.0, 2 * np.pi)
-        start_xy = target[:2] + dist * np.array([np.cos(ang), np.sin(ang)], dtype=np.float32)
-        self.evader_pos = np.array([start_xy[0], start_xy[1], altitude], dtype=np.float32)
+        target = torch.tensor(self.cfg['target_position'], dtype=torch.float32, device=self.device)
+        dist = float(np.random.uniform(dmin, dmax))
+        ang = float(np.random.uniform(0.0, 2 * np.pi))
+        start_xy = target[:2] + dist * torch.tensor([np.cos(ang), np.sin(ang)], device=self.device, dtype=torch.float32)
+        self.evader_pos = torch.tensor([start_xy[0], start_xy[1], altitude], dtype=torch.float32, device=self.device)
 
         # Initial velocity roughly toward the target in the x-y plane
         dir_xy = target[:2] - start_xy
-        dir_xy /= np.linalg.norm(dir_xy) + 1e-8
+        dir_xy /= torch.norm(dir_xy) + 1e-8
         # rotate within ±15 degrees to introduce some randomness
         max_off = np.deg2rad(15.0)
-        rot_ang = np.random.uniform(-max_off, max_off)
-        rot_mat = np.array([
+        rot_ang = float(np.random.uniform(-max_off, max_off))
+        rot_mat = torch.tensor([
             [np.cos(rot_ang), -np.sin(rot_ang)],
             [np.sin(rot_ang), np.cos(rot_ang)],
-        ], dtype=np.float32)
+        ], dtype=torch.float32, device=self.device)
         heading = rot_mat @ dir_xy
         speed = start_cfg.get('initial_speed', 0.0)
-        self.evader_vel = np.array([heading[0], heading[1], 0.0], dtype=np.float32) * speed
+        self.evader_vel = torch.tensor([heading[0], heading[1], 0.0], dtype=torch.float32, device=self.device) * speed
 
-        dir_vec = np.array([dir_xy[0], dir_xy[1], 0.0], dtype=np.float32)
-        dir_vec /= np.linalg.norm(dir_vec) + 1e-8
+        dir_vec = torch.tensor([dir_xy[0], dir_xy[1], 0.0], dtype=torch.float32, device=self.device)
+        dir_vec /= torch.norm(dir_vec) + 1e-8
         self.evader_force_dir = dir_vec
         self.evader_force_mag = 0.0
 
-        p_pos, p_vel, p_dir = sample_pursuer_start(self.evader_pos, heading, self.cfg)
-        self.pursuer_pos = p_pos.astype(np.float32)
-        self.pursuer_vel = p_vel.astype(np.float32)
-        self.pursuer_force_dir = p_dir.astype(np.float32)
+        p_pos, p_vel, p_dir = sample_pursuer_start(self.evader_pos, heading, self.cfg, self.device)
+        self.pursuer_pos = p_pos
+        self.pursuer_vel = p_vel
+        self.pursuer_force_dir = p_dir
         self.pursuer_force_mag = 0.0
         # store initial yaw/pitch of both agents for logging
-        self.init_pursuer_yaw = float(np.arctan2(self.pursuer_force_dir[1], self.pursuer_force_dir[0]))
+        self.init_pursuer_yaw = float(torch.atan2(self.pursuer_force_dir[1], self.pursuer_force_dir[0]))
         self.init_pursuer_pitch = float(
-            np.arctan2(self.pursuer_force_dir[2], np.linalg.norm(self.pursuer_force_dir[:2]))
+            torch.atan2(self.pursuer_force_dir[2], torch.norm(self.pursuer_force_dir[:2]))
         )
-        self.init_evader_yaw = float(np.arctan2(self.evader_force_dir[1], self.evader_force_dir[0]))
+        self.init_evader_yaw = float(torch.atan2(self.evader_force_dir[1], self.evader_force_dir[0]))
         self.init_evader_pitch = float(
-            np.arctan2(self.evader_force_dir[2], np.linalg.norm(self.evader_force_dir[:2]))
+            torch.atan2(self.evader_force_dir[2], torch.norm(self.evader_force_dir[:2]))
         )
         # record baseline distances for shaping rewards
-        self.prev_pe_dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
+        self.prev_pe_dist = torch.norm(self.evader_pos - self.pursuer_pos).item()
         # heading difference between the agents for shaping
-        h_e = self.evader_vel / (np.linalg.norm(self.evader_vel) + 1e-8)
-        h_p = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
+        h_e = self.evader_vel / (torch.norm(self.evader_vel) + 1e-8)
+        h_p = self.pursuer_vel / (torch.norm(self.pursuer_vel) + 1e-8)
         # store the starting distance for logging
         self.start_pe_dist = self.prev_pe_dist
-        target = np.array(self.cfg['target_position'], dtype=np.float32)
-        self.prev_target_dist = np.linalg.norm(self.evader_pos - target)
+        target = torch.tensor(self.cfg['target_position'], dtype=torch.float32, device=self.device)
+        self.prev_target_dist = torch.norm(self.evader_pos - target).item()
         # reset reward component totals
         self._reward_breakdown = {
             'terminal': 0.0,
@@ -327,8 +330,8 @@ class PursuitEvasionEnv(gym.Env):
         self.pursuer_pitch_delta = 0.0
         self.pursuer_vel_delta = 0.0
         # store previous positions to detect capture between steps
-        self.prev_pursuer_pos = self.pursuer_pos.copy()
-        self.prev_evader_pos = self.evader_pos.copy()
+        self.prev_pursuer_pos = self.pursuer_pos.clone()
+        self.prev_evader_pos = self.evader_pos.clone()
         vec_pe = self.evader_pos - self.pursuer_pos
         return self._get_obs(), {}
 
@@ -345,26 +348,25 @@ class PursuitEvasionEnv(gym.Env):
             their respective action arrays.
         """
 
-        evader_action = np.array(action['evader'], dtype=np.float32)
-        pursuer_action = np.array(action['pursuer'], dtype=np.float32)
+        evader_action = torch.tensor(action['evader'], dtype=torch.float32, device=self.device)
+        pursuer_action = torch.tensor(action['pursuer'], dtype=torch.float32, device=self.device)
         if self.prev_pursuer_action is not None:
             diff = pursuer_action - self.prev_pursuer_action
-            self.pursuer_acc_delta += abs(diff[0])
-            self.pursuer_yaw_delta += abs(np.arctan2(np.sin(diff[1]), np.cos(diff[1])))
-            self.pursuer_pitch_delta += abs(diff[2])
+            self.pursuer_acc_delta += float(torch.abs(diff[0]))
+            self.pursuer_yaw_delta += float(torch.abs(torch.atan2(torch.sin(diff[1]), torch.cos(diff[1]))))
+            self.pursuer_pitch_delta += float(torch.abs(diff[2]))
         self.prev_pursuer_action = pursuer_action
-        prev_p_pos = self.pursuer_pos.copy()
-        prev_e_pos = self.evader_pos.copy()
-        prev_dir = self.pursuer_force_dir.copy()
-        prev_vel = self.pursuer_vel.copy()
+        prev_p_pos = self.pursuer_pos.clone()
+        prev_e_pos = self.evader_pos.clone()
+        prev_vel = self.pursuer_vel.clone()
         self._update_agent('evader', evader_action)
         self._update_agent('pursuer', pursuer_action)
-        self.pursuer_vel_delta += np.linalg.norm(self.pursuer_vel - prev_vel)
+        self.pursuer_vel_delta += float(torch.norm(self.pursuer_vel - prev_vel))
         # shaping rewards based on change in distances
-        dist_pe = np.linalg.norm(self.evader_pos - self.pursuer_pos)
-        target = np.array(self.cfg['target_position'], dtype=np.float32)
-        dist_target = np.linalg.norm(self.evader_pos - target)
-        dist_target_xy = np.linalg.norm((self.evader_pos - target)[:2])
+        dist_pe = float(torch.norm(self.evader_pos - self.pursuer_pos))
+        target = torch.tensor(self.cfg['target_position'], dtype=torch.float32, device=self.device)
+        dist_target = float(torch.norm(self.evader_pos - target))
+        dist_target_xy = float(torch.norm((self.evader_pos - target)[:2]))
         success_thresh = self.cfg.get('target_success_distance', 100.0)
         self.min_pe_dist = min(self.min_pe_dist, dist_pe)
         shape_p = self.prev_pe_dist - dist_pe
@@ -376,14 +378,14 @@ class PursuitEvasionEnv(gym.Env):
         if self.closer_weight > 0.0 and dist_pe < self.prev_pe_dist:
             closer_bonus = self.closer_weight * (self.prev_pe_dist - dist_pe)
         # Reward for aligning the pursuer and evader headings
-        h_e = self.evader_vel / (np.linalg.norm(self.evader_vel) + 1e-8)
-        h_p = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
-        heading_bonus = self.heading_weight * float(np.dot(h_p, h_e))
+        h_e = self.evader_vel / (torch.norm(self.evader_vel) + 1e-8)
+        h_p = self.pursuer_vel / (torch.norm(self.pursuer_vel) + 1e-8)
+        heading_bonus = self.heading_weight * float(torch.dot(h_p, h_e))
         # Bonus for pointing the pursuer's velocity toward the evader
-        p_u = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
+        p_u = self.pursuer_vel / (torch.norm(self.pursuer_vel) + 1e-8)
         los = self.evader_pos - self.pursuer_pos
-        los_u = los / (np.linalg.norm(los) + 1e-8)
-        align_bonus = self.align_weight * float(np.dot(p_u, los_u))
+        los_u = los / (torch.norm(los) + 1e-8)
+        align_bonus = self.align_weight * float(torch.dot(p_u, los_u))
 
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
@@ -438,18 +440,18 @@ class PursuitEvasionEnv(gym.Env):
             info['pursuer_pitch_delta'] = float(self.pursuer_pitch_delta)
             info['pursuer_vel_delta'] = float(self.pursuer_vel_delta)
             # difference between starting and final orientation of both agents
-            p_yaw = np.arctan2(self.pursuer_force_dir[1], self.pursuer_force_dir[0])
-            p_pitch = np.arctan2(
-                self.pursuer_force_dir[2], np.linalg.norm(self.pursuer_force_dir[:2])
-            )
+            p_yaw = float(torch.atan2(self.pursuer_force_dir[1], self.pursuer_force_dir[0]))
+            p_pitch = float(torch.atan2(
+                self.pursuer_force_dir[2], torch.norm(self.pursuer_force_dir[:2])
+            ))
             yaw_diff = np.arctan2(np.sin(p_yaw - self.init_pursuer_yaw), np.cos(p_yaw - self.init_pursuer_yaw))
             pitch_diff = p_pitch - self.init_pursuer_pitch
             info['pursuer_yaw_diff'] = float(yaw_diff)
             info['pursuer_pitch_diff'] = float(pitch_diff)
-            e_yaw = np.arctan2(self.evader_force_dir[1], self.evader_force_dir[0])
-            e_pitch = np.arctan2(
-                self.evader_force_dir[2], np.linalg.norm(self.evader_force_dir[:2])
-            )
+            e_yaw = float(torch.atan2(self.evader_force_dir[1], self.evader_force_dir[0]))
+            e_pitch = float(torch.atan2(
+                self.evader_force_dir[2], torch.norm(self.evader_force_dir[:2])
+            ))
             info['evader_yaw_diff'] = float(
                 np.arctan2(np.sin(e_yaw - self.init_evader_yaw), np.cos(e_yaw - self.init_evader_yaw))
             )
@@ -461,7 +463,7 @@ class PursuitEvasionEnv(gym.Env):
         self.cur_step += 1
         return obs, reward, done, False, info
 
-    def _update_agent(self, name: str, action: np.ndarray):
+    def _update_agent(self, name: str, action: torch.Tensor):
         """Apply an action to either agent and integrate simple physics."""
 
         cfg_a = self.cfg[name]
@@ -475,29 +477,29 @@ class PursuitEvasionEnv(gym.Env):
             pos = self.evader_pos
             vel = self.evader_vel
             dir_vec = self.evader_force_dir
-            gravity = np.array([0.0, 0.0, -self.cfg['gravity']], dtype=np.float32)
+            gravity = torch.tensor([0.0, 0.0, -self.cfg['gravity']], dtype=torch.float32, device=self.device)
         else:
             pos = self.pursuer_pos
             vel = self.pursuer_vel
             dir_vec = self.pursuer_force_dir
-            gravity = np.zeros(3, dtype=np.float32)
+            gravity = torch.zeros(3, dtype=torch.float32, device=self.device)
 
         # Acceleration magnitude is a non-negative scalar. The commanded yaw and
         # pitch angles define the direction of the applied force.
-        mag = float(np.clip(action[0], 0.0, max_acc))
+        mag = float(torch.clamp(action[0], 0.0, max_acc))
         theta = float(action[1])
-        phi = float(np.clip(action[2], -stall, stall))
-        target_dir = np.array([
+        phi = float(torch.clamp(action[2], -stall, stall))
+        target_dir = torch.tensor([
             np.cos(phi) * np.cos(theta),
             np.cos(phi) * np.sin(theta),
             np.sin(phi),
-        ], dtype=np.float32)
-        target_dir /= np.linalg.norm(target_dir) + 1e-8
+        ], dtype=torch.float32, device=self.device)
+        target_dir /= torch.norm(target_dir) + 1e-8
 
         # Rotate current force direction toward the commanded yaw/pitch angles
         # separately, respecting independent turn rates
-        cur_yaw = np.arctan2(dir_vec[1], dir_vec[0])
-        cur_pitch = np.arctan2(dir_vec[2], np.linalg.norm(dir_vec[:2]))
+        cur_yaw = float(torch.atan2(dir_vec[1], dir_vec[0]))
+        cur_pitch = float(torch.atan2(dir_vec[2], torch.norm(dir_vec[:2])))
         yaw_diff = np.arctan2(np.sin(theta - cur_yaw), np.cos(theta - cur_yaw))
         pitch_diff = phi - cur_pitch
         max_yaw = yaw_rate * self.dt
@@ -505,12 +507,12 @@ class PursuitEvasionEnv(gym.Env):
         new_yaw = cur_yaw + np.clip(yaw_diff, -max_yaw, max_yaw)
         new_pitch = cur_pitch + np.clip(pitch_diff, -max_pitch, max_pitch)
         new_pitch = np.clip(new_pitch, -stall, stall)
-        new_dir = np.array([
+        new_dir = torch.tensor([
             np.cos(new_pitch) * np.cos(new_yaw),
             np.cos(new_pitch) * np.sin(new_yaw),
             np.sin(new_pitch),
-        ], dtype=np.float32)
-        new_dir /= np.linalg.norm(new_dir) + 1e-8
+        ], dtype=torch.float32, device=self.device)
+        new_dir /= torch.norm(new_dir) + 1e-8
 
         if name == 'evader':
             self.evader_force_dir = new_dir
@@ -529,53 +531,56 @@ class PursuitEvasionEnv(gym.Env):
         # commanded acceleration would overshoot and invert the velocity vector
         # along its original direction, clamp the component in that direction to
         # zero instead of letting the agent move backwards.
-        vel_dir = vel / (np.linalg.norm(vel) + 1e-8)
+        vel_dir = vel / (torch.norm(vel) + 1e-8)
         vel_new = vel + acc_total * self.dt
-        if np.dot(vel_new, vel_dir) < 0.0:
-            # remove the component opposing the previous velocity
-            perp = vel_new - np.dot(vel_new, vel_dir) * vel_dir
+        if torch.dot(vel_new, vel_dir) < 0.0:
+            perp = vel_new - torch.dot(vel_new, vel_dir) * vel_dir
             vel_new = perp
 
-        speed = np.linalg.norm(vel_new)
+        speed = torch.norm(vel_new)
         if speed > top_speed:
             vel_new = vel_new / speed * top_speed
         vel[:] = vel_new
         pos[:] = pos + vel * self.dt
 
-    def _angle_between(self, a: np.ndarray, b: np.ndarray) -> float:
+    def _angle_between(self, a: torch.Tensor, b: torch.Tensor) -> float:
         """Return angle between two vectors in radians."""
-        a_n = np.linalg.norm(a) + 1e-8
-        b_n = np.linalg.norm(b) + 1e-8
-        cos_t = np.clip(np.dot(a, b) / (a_n * b_n), -1.0, 1.0)
-        return float(np.arccos(cos_t))
+        a_n = torch.norm(a) + 1e-8
+        b_n = torch.norm(b) + 1e-8
+        cos_t = torch.clamp(torch.dot(a, b) / (a_n * b_n), -1.0, 1.0)
+        return float(torch.acos(cos_t))
 
-    def _observe_enemy(self, observer_pos: np.ndarray, enemy_pos: np.ndarray,
-                        prev_obs: np.ndarray | None) -> tuple[np.ndarray, np.ndarray]:
+    def _observe_enemy(
+        self,
+        observer_pos: torch.Tensor,
+        enemy_pos: torch.Tensor,
+        prev_obs: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Return noisy observation of the enemy position and velocity."""
 
         vec = enemy_pos - observer_pos
-        r = np.linalg.norm(vec) + 1e-8
-        ra = np.arctan2(vec[1], vec[0])
-        dec = np.arcsin(vec[2] / r)
+        r = torch.norm(vec) + 1e-8
+        ra = torch.atan2(vec[1], vec[0])
+        dec = torch.asin(vec[2] / r)
         if self.meas_err > 0.0:
-            ra += ra * self.meas_err * np.random.randn()
-            dec += dec * self.meas_err * np.random.randn()
-        direction = np.array([
-            np.cos(dec) * np.cos(ra),
-            np.cos(dec) * np.sin(ra),
-            np.sin(dec),
-        ], dtype=np.float32)
+            ra += ra * self.meas_err * torch.randn((), device=self.device)
+            dec += dec * self.meas_err * torch.randn((), device=self.device)
+        direction = torch.tensor([
+            torch.cos(dec) * torch.cos(ra),
+            torch.cos(dec) * torch.sin(ra),
+            torch.sin(dec),
+        ], dtype=torch.float32, device=self.device)
         pos_obs = observer_pos + direction * r
         if prev_obs is None:
-            vel_obs = enemy_pos - enemy_pos  # zeros
+            vel_obs = enemy_pos - enemy_pos
         else:
             vel_obs = (pos_obs - prev_obs) / self.dt
-        return pos_obs.astype(np.float32), vel_obs.astype(np.float32)
+        return pos_obs, vel_obs
 
     def _check_done(
         self,
-        prev_p_pos: np.ndarray | None = None,
-        prev_e_pos: np.ndarray | None = None,
+        prev_p_pos: torch.Tensor | None = None,
+        prev_e_pos: torch.Tensor | None = None,
     ):
         """Determine if the episode has terminated.
 
@@ -583,28 +588,28 @@ class PursuitEvasionEnv(gym.Env):
         the ground or the evader reaching the vicinity of its target while
         still airborne.
         """
-        dist = np.linalg.norm(self.evader_pos - self.pursuer_pos)
-        target = np.array(self.cfg['target_position'], dtype=np.float32)
-        dist_target = np.linalg.norm(self.evader_pos - target)
-        dist_target_xy = np.linalg.norm((self.evader_pos - target)[:2])
+        dist = float(torch.norm(self.evader_pos - self.pursuer_pos))
+        target = torch.tensor(self.cfg['target_position'], dtype=torch.float32, device=self.device)
+        dist_target = float(torch.norm(self.evader_pos - target))
+        dist_target_xy = float(torch.norm((self.evader_pos - target)[:2]))
         success_thresh = self.cfg.get('target_success_distance', 100.0)
 
         cross_capture = False
         if prev_p_pos is not None and prev_e_pos is not None:
             prev_vec = prev_e_pos - prev_p_pos
             cur_vec = self.evader_pos - self.pursuer_pos
-            if np.dot(prev_vec, cur_vec) < 0.0:
+            if torch.dot(prev_vec, cur_vec) < 0.0:
                 rel_start = prev_p_pos - prev_e_pos
                 rel_v = (
                     (self.pursuer_pos - prev_p_pos)
                     - (self.evader_pos - prev_e_pos)
                 )
-                v_norm_sq = np.dot(rel_v, rel_v)
+                v_norm_sq = torch.dot(rel_v, rel_v)
                 if v_norm_sq > 1e-12:
-                    t = -np.dot(rel_start, rel_v) / v_norm_sq
+                    t = -torch.dot(rel_start, rel_v) / v_norm_sq
                     if 0.0 <= t <= 1.0:
                         closest = rel_start + rel_v * t
-                        if np.linalg.norm(closest) <= self.cfg['capture_radius']:
+                        if torch.norm(closest) <= self.cfg['capture_radius']:
                             cross_capture = True
                 elif dist <= self.cfg['capture_radius']:
                     cross_capture = True
@@ -647,28 +652,33 @@ class PursuitEvasionEnv(gym.Env):
 
         # pursuer observation: own state, evader position and normalized direction
         direction_pe = ev_pos_obs - self.pursuer_pos
-        norm_pe = np.linalg.norm(direction_pe) + 1e-8
-        obs_p = np.concatenate([
-            self.pursuer_pos,
-            self.pursuer_vel,
-            ev_pos_obs,
-            direction_pe / norm_pe,
-        ])
+        norm_pe = torch.norm(direction_pe) + 1e-8
+        obs_p = torch.cat(
+            [
+                self.pursuer_pos,
+                self.pursuer_vel,
+                ev_pos_obs,
+                direction_pe / norm_pe,
+            ]
+        )
 
         # evader observation starts with its own state and the target
-        obs_elems = [self.evader_pos, self.evader_vel, self.cfg['target_position']]
+        obs_elems = [self.evader_pos, self.evader_vel, torch.tensor(self.cfg['target_position'], dtype=torch.float32, device=self.device)]
         mode = self.cfg['evader'].get('awareness_mode', 1)
         if mode == 2:
-            dist = np.linalg.norm(pu_pos_obs - self.evader_pos)
-            obs_elems.append([dist])
+            dist = torch.norm(pu_pos_obs - self.evader_pos)
+            obs_elems.append(torch.tensor([dist], device=self.device))
         elif mode == 3:
             direction = pu_pos_obs - self.evader_pos
-            norm = np.linalg.norm(direction) + 1e-8
+            norm = torch.norm(direction) + 1e-8
             obs_elems.append(direction / norm)
         elif mode >= 4:
             obs_elems.append(pu_pos_obs)
-        obs_e = np.concatenate([np.asarray(x).ravel() for x in obs_elems])
-        return {'pursuer': obs_p.astype(np.float32), 'evader': obs_e.astype(np.float32)}
+        obs_e = torch.cat([x.view(-1) for x in obs_elems])
+        return {
+            'pursuer': obs_p.cpu().numpy().astype(np.float32),
+            'evader': obs_e.cpu().numpy().astype(np.float32),
+        }
 
 
 def _make_mlp(
