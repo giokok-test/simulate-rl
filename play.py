@@ -7,20 +7,13 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from pursuit_evasion import load_config
-from train_pursuer_ppo import ActorCritic, PursuerOnlyEnv
+from train_pursuer_ppo import PursuerOnlyEnv
+from train_pursuer_qlearning import QNetwork, ACTIONS
 
-# Discretisation for Q-learning
+# Discretisation for legacy Q-table models
 N_BINS = 10
 MAX_DIST = 5000.0
 BINS = np.linspace(-MAX_DIST, MAX_DIST, N_BINS - 1)
-ACTIONS = np.array([
-    [0.0, 0.0, 0.0],
-    [10.0, 0.0, 0.0],
-    [10.0, -0.2, 0.0],
-    [10.0, 0.2, 0.0],
-    [10.0, 0.0, 0.2],
-    [10.0, 0.0, -0.2],
-], dtype=np.float32)
 
 def _discretise(obs: np.ndarray) -> int:
     diff = obs[6:9] - obs[0:3]
@@ -84,11 +77,11 @@ def run_episode(model_path: str, max_steps: int | None = None, profile: bool = F
     env = PursuerOnlyEnv(cfg, max_steps=max_steps)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    use_q = model_path.endswith(".npy")
-    if use_q:
+    use_q_table = model_path.endswith(".npy")
+    if use_q_table:
         q_table = np.load(model_path)
     else:
-        model = ActorCritic(env.observation_space.shape[0])
+        model = QNetwork(env.observation_space.shape[0], len(ACTIONS))
         state = torch.load(model_path, map_location=device)
         model.load_state_dict(state)
         model.to(device)
@@ -130,23 +123,18 @@ def run_episode(model_path: str, max_steps: int | None = None, profile: bool = F
     while not done:
         if profile:
             t0 = time.perf_counter()
-        if use_q:
+        if use_q_table:
             idx = _discretise(obs)
             action = ACTIONS[int(np.argmax(q_table[idx]))]
         else:
             with torch.no_grad():
-                obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
-                mean, _ = model(obs_t)
-                std = model.std.expand_as(mean)
-                dist = torch.distributions.Normal(mean, std)
-                action = dist.mean.cpu().numpy()
+                obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
+                q_values = model(obs_t)
+            action = ACTIONS[int(torch.argmax(q_values, dim=1).item())]
         if profile:
             infer_time += time.perf_counter() - t0
             t0 = time.perf_counter()
-        if use_q:
-            obs, r, done, _, info = env.step(action)
-        else:
-            obs, r, done, _, info = env.step(action)
+        obs, r, done, _, info = env.step(action)
         if profile:
             step_time += time.perf_counter() - t0
         pursuer_traj.append(env.env.pursuer_pos.copy())
@@ -349,7 +337,7 @@ if __name__ == "__main__":
         description="Run a single episode using a saved pursuer model"
     )
     parser.add_argument(
-        "--model", type=str, default="pursuer_ppo.pt", help="path to weight file"
+        "--model", type=str, default="pursuer_dqn.pt", help="path to weight file"
     )
     parser.add_argument(
         "--steps",

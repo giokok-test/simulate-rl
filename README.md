@@ -1,9 +1,9 @@
 # Simulated Pursuit-Evasion RL
 
-This repository contains a very small demonstration of a 3D pursuit--evasion
+This repository contains a small demonstration of a 3D pursuit--evasion
 environment written using `gymnasium`. Two agents (an evader and a pursuer)
-move in a simplified physics world. The provided script trains a pursuer policy
-using Proximal Policy Optimization (PPO).
+move in a simplified physics world.  The current training script implements
+Deep Q-learning with a replay buffer and TensorBoard logging.
 
 ## Environment setup
 
@@ -30,146 +30,45 @@ scripts.
 
 ## Running the first training
 
-The `train_pursuer_ppo.py` script trains a small neural network policy for the
+The `train_pursuer_qlearning.py` script trains a Q-network to control the
 pursuer while the evader follows a scripted behaviour. To start training run:
 
 ```bash
-python train_pursuer_ppo.py
-```
-The script saves the trained policy to `pursuer_ppo.pt` by default. You can
-override this with `--save-path`.
-
-The script accepts a few command line options to control the training. For
-instance, to run 200 episodes with a smaller learning rate and evaluation every
-20 episodes while saving checkpoints every 50 episodes:
-
-```bash
-python train_pursuer_ppo.py --episodes 200 --lr 5e-4 --eval-freq 20 --checkpoint-every 50
+python train_pursuer_qlearning.py --log-dir runs/dqn
 ```
 
-The defaults for these options live in ``training.yaml`` and can be
-modified directly in that file.
+Weights are saved to `pursuer_dqn.pt` by default. Command line arguments allow
+overriding the episode count and log directory. All defaults live in
+``training.yaml`` and can be modified directly in that file.
 
-Pass ``--profile`` to print how much time is spent collecting rollouts,
-optimising the policy and running evaluations. When ``--log-dir`` is set the
-timings are also written under the ``timing/`` namespace for TensorBoard.
-
-It will print evaluation statistics every ``--eval-freq`` episodes and a final
-summary when training finishes. When curriculum training is enabled these
-evaluation episodes always use the final environment configuration so progress
-is measured against the target difficulty.
+Pass ``--log-dir`` to write TensorBoard metrics such as episode reward,
+evaluation return, loss and exploration rate.
 
 ### Monitoring training with TensorBoard
 
-The training script can write metrics for visualization with TensorBoard.
-Pass ``--log-dir`` to specify where logs should be stored. For example:
-
-```bash
-python train_pursuer_ppo.py --log-dir runs/ppo
-```
-
-Start TensorBoard with
+When ``--log-dir`` is supplied the trainer writes episode reward, loss,
+exploration rate and evaluation return for visualisation with TensorBoard:
 
 ```bash
 tensorboard --logdir runs
 ```
 
-This will show episode rewards, evaluation results and losses during training.
-When a log directory is set, periodic checkpoints created with
-``--checkpoint-every`` are stored under ``<log-dir>/checkpoints``.
-The logs also record a breakdown of the pursuer reward into shaping,
-closer, heading, align and terminal components as well as the fractions of each
-termination type aggregated over ``training.outcome_window`` episodes.
-When running multiple environments in parallel the average minimum
-distance to the evader and mean episode length are logged under
-``train/min_distance`` and ``train/episode_length``.
-The ratio between the closest approach and the initial pursuer--evader
-distance is stored as ``train/min_start_ratio`` to help gauge how much
-closer the pursuer gets relative to the spawn distance.  Individual
-episode statistics for each environment are written under the
-``episode/`` namespace. The mean values for the batch use the cumulative
-episode counter as ``batch_step`` and are logged under ``batch/`` so the
-curves progress monotonically even with multiple environments. The
-``timing/episodes_per_sec`` metric now shares this counter to report how
-many episodes are processed per second of wall time.
-The logger also records the cumulative change in the pursuer's commanded
-acceleration, yaw and pitch for each episode as ``train/acc_delta``,
-``train/yaw_delta`` and ``train/pitch_delta``. The total change in
-velocity is logged as ``train/vel_delta``. These per-episode totals
-are written for every environment under the ``episode/`` namespace.
-The difference between the starting and final pursuer orientation is logged as
-``train/yaw_diff`` and ``train/pitch_diff``.
-Every ``training.outcome_window`` episodes the script also prints the
-number of occurrences of each termination reason so you can quickly see
-how episodes are ending.
-When curriculum training is enabled the current angular and distance
-ranges are written under the ``curriculum/`` namespace so the schedule
-can be visualised over time.
-When running PPO with multiple environments the logger now reports the
-mean minimum pursuer--evader distance and episode length across all
-environments.  A summary of how many episodes ended in each termination
-state is printed every iteration for easier monitoring.
-Reward breakdown metrics are averaged across all environments so the
-``train/reward_*`` values reflect the mean contribution of each component
-per episode.
-
-### New training options
-
-The training script supports additional parameters for
-weight decay, learning rate scheduling and model size. These can be set via the
-configuration in ``training.yaml`` or from the command line:
-
-```bash
-python train_pursuer_ppo.py --weight-decay 1e-4 --lr-step-size 500 --lr-gamma 0.9 \
-    --hidden-size 128 --activation tanh
-```
-
-The `hidden-size` and `activation` options control the width and activation
-function of the two-layer MLP used by the policies (available activations are
-`relu`, `tanh` and `leaky_relu`).
-
-### Hyperparameter sweeps
-
-The repository includes a small `sweep.py` utility which iterates over a grid of
-hyperparameters and logs each run to its own TensorBoard directory. The sweep
-script also records the number of episodes required to reach a configurable
-average reward threshold via the `sweep/episodes_to_reward` metric.
-
-### PPO training
-
-The ``train_pursuer_ppo.py`` script implements a minimal Proximal Policy
-Optimization loop with an entropy bonus:
-
-```bash
-python train_pursuer_ppo.py
-```
-The trained weights are written to ``pursuer_ppo.pt`` unless ``--save-path`` is
-specified. The script also supports ``--checkpoint-every`` to save periodic
-checkpoints and ``--resume-from`` to continue from a saved model. If
-``--log-dir`` is supplied these checkpoints are placed in ``<log-dir>/checkpoints``.
-The trainer additionally accepts ``--num-envs`` to run several environment
-instances in parallel which can significantly speed up data collection on
-multi-core machines. All algorithm parameters (``gamma``, ``clip_ratio``,
-``ppo_epochs`` and the entropy bonus weight) are stored in ``training.yaml`` and
-may be overridden via command line flags. The entropy bonus coefficient decays
-linearly from ``entropy_coef_start`` to ``entropy_coef_end`` over the course of
-training.
+Periodic checkpoints are stored under ``<log-dir>/checkpoints``.
 
 ### Q-learning training
 
-The ``train_pursuer_qlearning.py`` script uses a simple tabular Q-learning
-algorithm inspired by `Watkins & Dayan, 1992` to control the pursuer. The
-continuous observation is discretised into a coarse grid of relative positions
-and a small set of discrete actions.
+The ``train_pursuer_qlearning.py`` script implements deep Q-learning with a
+replay buffer and target network. Continuous observations feed a small MLP
+which outputs action-values for the discrete manoeuvre set.
 
 Run training with:
 
 ```bash
-python train_pursuer_qlearning.py --config training.yaml --save-path pursuer_q.npy
+python train_pursuer_qlearning.py --config training.yaml --log-dir runs/dqn
 ```
 
-The resulting Q-table is stored as a ``.npy`` file. Logging with TensorBoard is
-available by setting ``q_learning.log_dir`` in ``training.yaml``.
+The trained weights are saved as ``pursuer_dqn.pt``. Enable TensorBoard logging
+by setting ``q_learning.log_dir`` in ``training.yaml`` or passing ``--log-dir``.
 
 ### Curriculum training
 
@@ -212,7 +111,7 @@ The following command line arguments tune the curriculum behaviour:
 For example, to train with the adaptive curriculum enabled:
 
 ```bash
-python train_pursuer_ppo.py --curriculum-mode adaptive --success-threshold 0.8 \
+python train_pursuer_qlearning.py --curriculum-mode adaptive --success-threshold 0.8 \
     --curriculum-window 50 --curriculum-stages 5
 ```
 
@@ -227,10 +126,10 @@ python pursuit_evasion.py
 
 which is useful for quickly checking that the environment works.
 
-- `play.py` loads a saved policy and runs a single episode using either a PPO
-  policy or a Q-table (``.npy`` file). Episodes run for the
-  duration specified by `episode_duration` in ``env.yaml`` unless `--steps` is
-  used to override the maximum number of simulation steps.
+- `play.py` loads a saved Q-network (``.pt``) or legacy Q-table (``.npy``) and
+  runs a single episode. Episodes run for the duration specified by
+  `episode_duration` in ``env.yaml`` unless `--steps`` overrides the maximum
+  number of simulation steps.
   The plot now highlights the starting and final positions of both agents,
   marks the evader's goal position and draws arrows indicating the initial
   heading of both players. During the run a table prints the distance vectors
@@ -292,7 +191,7 @@ The initial speed of the pursuer is drawn uniformly from
 `pursuer_start.initial_speed_range`, which can also be modified via the
 training curriculum to gradually narrow or expand the spawn speed
 interval.
-Both `pursuit_evasion.py` and `train_pursuer_ppo.py` load the configuration
+Both `pursuit_evasion.py` and `train_pursuer_qlearning.py` load the configuration
 at runtime, so changes take effect the next time you run the script.
 The reward shaping parameters `shaping_weight`, `closer_weight`,
 `heading_weight` and `align_weight` can be adjusted
