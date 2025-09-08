@@ -155,6 +155,22 @@ may be overridden via command line flags. The entropy bonus coefficient decays
 linearly from ``entropy_coef_start`` to ``entropy_coef_end`` over the course of
 training.
 
+### Q-learning training
+
+The ``train_pursuer_qlearning.py`` script uses a simple tabular Q-learning
+algorithm inspired by `Watkins & Dayan, 1992` to control the pursuer. The
+continuous observation is discretised into a coarse grid of relative positions
+and a small set of discrete actions.
+
+Run training with:
+
+```bash
+python train_pursuer_qlearning.py --config training.yaml --save-path pursuer_q.npy
+```
+
+The resulting Q-table is stored as a ``.npy`` file. Logging with TensorBoard is
+available by setting ``q_learning.log_dir`` in ``training.yaml``.
+
 ### Curriculum training
 
 The training script optionally supports gradually increasing the starting
@@ -211,8 +227,8 @@ python pursuit_evasion.py
 
 which is useful for quickly checking that the environment works.
 
-- `play.py` loads a saved policy and runs a single episode using the PPO
-  policy. Episodes run for the
+- `play.py` loads a saved policy and runs a single episode using either a PPO
+  policy or a Q-table (``.npy`` file). Episodes run for the
   duration specified by `episode_duration` in ``env.yaml`` unless `--steps` is
   used to override the maximum number of simulation steps.
   The plot now highlights the starting and final positions of both agents,

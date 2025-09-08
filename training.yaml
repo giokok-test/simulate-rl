@@ -74,3 +74,15 @@ training:
         # Final range of pursuer spawn speeds [m/s]
         initial_speed_range: [50.0, 75.0]
         force_target_radius: 350.0
+
+# Q-learning parameters
+q_learning:
+  episodes: 5000
+  alpha: 0.1
+  gamma: 0.99
+  epsilon: 1.0
+  epsilon_decay: 0.995
+  min_epsilon: 0.05
+  max_steps: 500
+  log_dir: null
+
