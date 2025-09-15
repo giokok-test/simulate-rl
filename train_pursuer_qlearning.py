@@ -32,8 +32,7 @@ import yaml
 from gymnasium import Env
 from torch.utils.tensorboard import SummaryWriter
 
-from pursuit_evasion import load_config
-from train_pursuer_ppo import PursuerOnlyEnv
+from pursuit_evasion import load_config, PursuerOnlyEnv
 
 
 # Action set: [acceleration magnitude, yaw, pitch]
@@ -186,22 +185,27 @@ def train(cfg: QConfig, env_cfg: dict) -> QNetwork:
     for ep in range(cfg.episodes):
         obs, _ = env.reset()
         total_reward = 0.0
+        q_sum = 0.0
+        q_count = 0
         for _ in range(cfg.max_steps):
             global_step += 1
+            obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
+            with torch.no_grad():
+                q_values = policy(obs_t)
             if np.random.rand() < epsilon:
                 action_idx = np.random.randint(n_actions)
             else:
-                with torch.no_grad():
-                    obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
-                    q_values = policy(obs_t)
                 action_idx = int(torch.argmax(q_values, dim=1).item())
+
+            q_sum += float(q_values.max().item())
+            q_count += 1
 
             next_obs, reward, done, _, _ = env.step(ACTIONS[action_idx])
             buffer.add(obs, action_idx, reward, next_obs, done)
             obs = next_obs
             total_reward += reward
 
-            if (buffer.full or buffer.idx >= cfg.batch_size):
+            if buffer.full or buffer.idx >= cfg.batch_size:
                 batch = buffer.sample(cfg.batch_size)
                 loss = compute_loss(batch, policy, target, cfg.gamma, device)
                 optim.zero_grad()
@@ -220,6 +224,9 @@ def train(cfg: QConfig, env_cfg: dict) -> QNetwork:
         if writer:
             writer.add_scalar("train/episode_reward", total_reward, ep)
             writer.add_scalar("train/epsilon", epsilon, ep)
+            writer.add_scalar("train/avg_q", q_sum / max(q_count, 1), ep)
+            replay_size = buffer.capacity if buffer.full else buffer.idx
+            writer.add_scalar("train/replay_size", replay_size, ep)
 
         if (ep + 1) % cfg.eval_freq == 0:
             eval_env = PursuerOnlyEnv(env_cfg, max_steps=cfg.max_steps)

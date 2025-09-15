@@ -671,6 +671,94 @@ class PursuitEvasionEnv(gym.Env):
         return {'pursuer': obs_p.astype(np.float32), 'evader': obs_e.astype(np.float32)}
 
 
+def evader_policy(env: "PursuitEvasionEnv") -> np.ndarray:
+    """Greedy acceleration of the evader toward the target.
+
+    The evader points its thrust toward ``env.cfg['target_position']`` while
+    respecting the configured ``stall_angle`` and optional ``dive`` profile.
+    Returns an action vector ``[magnitude, yaw, pitch]`` in the environment's
+    expected format.
+    """
+
+    pos = env.evader_pos
+    target = np.asarray(env.cfg["target_position"], dtype=np.float32)
+    direction = target - pos
+    norm = np.linalg.norm(direction)
+    if norm > 1e-8:
+        direction /= norm
+    theta = float(np.arctan2(direction[1], direction[0]))
+    phi_target = float(np.arctan2(direction[2], np.linalg.norm(direction[:2])))
+    mode = env.cfg["evader"].get("trajectory", "direct")
+    if mode == "dive":
+        threshold = env.cfg["evader"].get("dive_angle", 0.0)
+        if phi_target > -threshold:
+            phi = max(0.0, phi_target)
+        else:
+            phi = phi_target
+    else:
+        phi = phi_target
+    phi = np.clip(
+        phi,
+        -env.cfg["evader"]["stall_angle"],
+        env.cfg["evader"]["stall_angle"],
+    )
+    mag = env.cfg["evader"]["max_acceleration"]
+    return np.array([mag, theta, phi], dtype=np.float32)
+
+
+class PursuerOnlyEnv(gym.Env):
+    """Wrapper exposing only the pursuer interface.
+
+    This embeds :class:`PursuitEvasionEnv` but hides the evader action space by
+    applying :func:`evader_policy` internally. Only the pursuer observation and
+    reward are returned which simplifies training single-agent algorithms.
+    """
+
+    def __init__(self, cfg: dict, max_steps: int | None = None, capture_bonus: float = 0.0) -> None:
+        super().__init__()
+        self.env = PursuitEvasionEnv(cfg)
+        self.observation_space = self.env.observation_space["pursuer"]
+        self.action_space = self.env.action_space["pursuer"]
+        if max_steps is None:
+            duration = cfg.get("episode_duration", 0.1)
+            self.max_steps = int(duration * 60.0 / cfg["time_step"])
+        else:
+            self.max_steps = max_steps
+        self.capture_bonus = capture_bonus
+        self.cur_step = 0
+
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
+        obs, info = self.env.reset(seed=seed)
+        self.cur_step = 0
+        self.start_distance = self.env.start_pe_dist
+        return obs["pursuer"].astype(np.float32), info
+
+    def step(self, action: np.ndarray):
+        e_action = evader_policy(self.env)
+        obs, reward, done, truncated, info = self.env.step({"pursuer": action, "evader": e_action})
+        info.setdefault("start_distance", float(self.env.start_pe_dist))
+        r_p = float(reward["pursuer"])
+        timing_bonus = 0.0
+        if done and info.get("outcome") == "capture":
+            steps = info.get("episode_steps", self.cur_step + 1)
+            timing_bonus = self.capture_bonus * (self.max_steps - steps)
+            r_p += timing_bonus
+        info["timing_bonus"] = timing_bonus
+        self.cur_step += 1
+        if self.cur_step >= self.max_steps and not done:
+            done = True
+            info.setdefault("episode_steps", self.cur_step)
+            info.setdefault("min_distance", float(self.env.min_pe_dist))
+            final_dist = np.linalg.norm(self.env.evader_pos - self.env.pursuer_pos)
+            info.setdefault("final_distance", float(final_dist))
+            target = np.asarray(self.env.cfg["target_position"], dtype=np.float32)
+            dist_target = np.linalg.norm(self.env.evader_pos - target)
+            info.setdefault("evader_to_target", float(dist_target))
+            info.setdefault("start_distance", float(self.env.start_pe_dist))
+            info["outcome"] = "timeout"
+        return obs["pursuer"].astype(np.float32), r_p, done, truncated, info
+
+
 def _make_mlp(
     input_dim: int,
     output_dim: int,

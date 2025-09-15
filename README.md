@@ -70,51 +70,6 @@ python train_pursuer_qlearning.py --config setup/training.yaml --log-dir runs/dq
 The trained weights are saved as ``pursuer_dqn.pt``. Enable TensorBoard logging
 by setting ``q_learning.log_dir`` in ``setup/training.yaml`` or passing ``--log-dir``.
 
-### Curriculum training
-
-The training script optionally supports gradually increasing the starting
-difficulty of each episode. The ``training.curriculum`` section in
-``setup/training.yaml`` contains ``start`` and ``end`` dictionaries with values that are
-interpolated over the course of training. Any numeric field under these
-dictionaries is interpolated logarithmically from the ``start`` value to the
-``end`` value when both numbers are positive. This produces small increments
-early on and larger jumps later in training. Values crossing or equal to zero
-fall back to linear interpolation. The ``training.curriculum_stages`` option
-specifies how many discrete stages are used, with ``N`` meaning ``N - 1``
-transitions from the start to the end configuration. Progress within a stage is
-computed as
-``stage_idx / max(curriculum_stages - 1, 1)``. For example, the default configuration narrows
-the pursuer's `yaw_range` and initial `force_target_radius` to begin the
-agent immediately behind the evader while increasing `evader_start.initial_speed`
-from 0&nbsp;m/s to 50&nbsp;m/s before expanding to the full search
-area. The pursuer's own starting velocity can be scheduled with
-`pursuer_start.initial_speed_range` so early stages may use a fixed
-speed while later ones draw from a wider range. The curriculum makes it
-possible to smoothly transition from simple
-encounters to more challenging ones. The length of the success history
-used by the adaptive curriculum is controlled with ``curriculum_window``
-while ``curriculum_stages`` defines how many intermediate steps exist
-between the ``start`` and ``end`` configuration.
-
-The following command line arguments tune the curriculum behaviour:
-
-- ``--curriculum-mode`` – ``linear`` progresses through the curriculum at a
-  fixed rate while ``adaptive`` only advances when the success threshold is
-  met.
-- ``--success-threshold`` – fraction of recent episodes that must succeed
-  before moving to the next curriculum stage.
-- ``--curriculum-window`` – number of episodes used to compute the adaptive
-  success rate.
-- ``--curriculum-stages`` – number of curriculum increments between
-  ``start`` and ``end``.
-
-For example, to train with the adaptive curriculum enabled:
-
-```bash
-python train_pursuer_qlearning.py --curriculum-mode adaptive --success-threshold 0.8 \
-    --curriculum-window 50 --curriculum-stages 5
-```
-
 ## Additional scripts
 
 - `pursuit_evasion.py` contains the environment implementation along with a
@@ -141,6 +96,9 @@ which is useful for quickly checking that the environment works.
   only (surface fills were removed to keep the plot responsive).
   Use ``--profile`` to print how long inference, environment stepping and
   plotting take.
+- `sweep.py` performs a simple hyperparameter sweep for Q-learning by varying
+  the learning rate and exploration decay. Each configuration logs metrics to a
+  separate TensorBoard directory.
 - `plot_config.py` renders a stand-alone visualisation of the environment
   configuration showing an outline of the spawn volume. The accompanying
   `SpawnVolumeDemo.ipynb` notebook calls this script so you can interactively
@@ -188,9 +146,8 @@ the section based spawning.  Combined with the `min_range` and
 `max_range` distances these options define where the pursuer may appear at
 the beginning of an episode.
 The initial speed of the pursuer is drawn uniformly from
-`pursuer_start.initial_speed_range`, which can also be modified via the
-training curriculum to gradually narrow or expand the spawn speed
-interval.
+`pursuer_start.initial_speed_range`, defining the range of possible spawn
+velocities.
 Both `pursuit_evasion.py` and `train_pursuer_qlearning.py` load the configuration
 at runtime, so changes take effect the next time you run the script.
 The reward shaping parameters `shaping_weight` and `align_weight` can be
