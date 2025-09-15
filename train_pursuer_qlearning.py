@@ -125,24 +125,46 @@ class QNetwork(nn.Module):
         return self.net(x)
 
 
-def evaluate(env: Env, policy: QNetwork, device: torch.device, episodes: int = 5) -> float:
-    """Greedy policy evaluation returning mean reward over ``episodes``."""
+def evaluate(
+    env: Env, policy: QNetwork, device: torch.device, episodes: int = 5
+) -> tuple[float, dict[str, float]]:
+    """Greedy policy evaluation returning mean reward and auxiliary metrics."""
 
     rewards = []
+    min_start_ratios: list[float] = []
+    min_distances: list[float] = []
+    episode_steps: list[int] = []
+    captures = 0
     for _ in range(episodes):
         obs, _ = env.reset()
         total = 0.0
+        info: dict | None = None
         for _ in range(env.max_steps):
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
             with torch.no_grad():
                 q_values = policy(obs_t)
             action = ACTIONS[int(torch.argmax(q_values, dim=1).item())]
-            obs, reward, done, _, _ = env.step(action)
+            obs, reward, done, _, info = env.step(action)
             total += reward
             if done:
                 break
         rewards.append(total)
-    return float(np.mean(rewards))
+        if info:
+            min_d = info.get("min_distance")
+            start_d = info.get("start_distance", 1.0)
+            if min_d is not None:
+                min_distances.append(float(min_d))
+                min_start_ratios.append(float(min_d) / max(start_d, 1e-8))
+            episode_steps.append(info.get("episode_steps", env.max_steps))
+            if info.get("outcome") == "capture":
+                captures += 1
+    metrics = {
+        "avg_min_distance": float(np.mean(min_distances)) if min_distances else 0.0,
+        "avg_min_start_ratio": float(np.mean(min_start_ratios)) if min_start_ratios else 0.0,
+        "avg_episode_steps": float(np.mean(episode_steps)) if episode_steps else 0.0,
+        "capture_rate": captures / episodes if episodes > 0 else 0.0,
+    }
+    return float(np.mean(rewards)), metrics
 
 
 def compute_loss(
@@ -258,6 +280,32 @@ def train(
                 writer.add_scalar("train/curriculum_progress", curriculum.progress, ep)
             replay_size = buffer.capacity if buffer.full else buffer.idx
             writer.add_scalar("train/replay_size", replay_size, ep)
+            if info:
+                start_d = info.get("start_distance", 0.0)
+                min_d = info.get("min_distance")
+                if min_d is not None and start_d > 0:
+                    writer.add_scalar("train/min_distance", min_d, ep)
+                    writer.add_scalar("train/start_distance", start_d, ep)
+                    writer.add_scalar("train/min_start_ratio", min_d / start_d, ep)
+                writer.add_scalar("train/episode_steps", info.get("episode_steps", 0), ep)
+                writer.add_scalar("train/final_distance", info.get("final_distance", 0.0), ep)
+                writer.add_scalar("train/evader_to_target", info.get("evader_to_target", 0.0), ep)
+                writer.add_scalar("train/pursuer_acc_delta", info.get("pursuer_acc_delta", 0.0), ep)
+                writer.add_scalar("train/pursuer_yaw_delta", info.get("pursuer_yaw_delta", 0.0), ep)
+                writer.add_scalar("train/pursuer_pitch_delta", info.get("pursuer_pitch_delta", 0.0), ep)
+                writer.add_scalar("train/pursuer_vel_delta", info.get("pursuer_vel_delta", 0.0), ep)
+                writer.add_scalar("train/pursuer_yaw_diff", info.get("pursuer_yaw_diff", 0.0), ep)
+                writer.add_scalar("train/pursuer_pitch_diff", info.get("pursuer_pitch_diff", 0.0), ep)
+                writer.add_scalar("train/evader_yaw_diff", info.get("evader_yaw_diff", 0.0), ep)
+                writer.add_scalar("train/evader_pitch_diff", info.get("evader_pitch_diff", 0.0), ep)
+                writer.add_scalar(
+                    "train/capture", 1.0 if info.get("outcome") == "capture" else 0.0, ep
+                )
+                writer.add_scalar("train/timing_bonus", info.get("timing_bonus", 0.0), ep)
+                r_bd = info.get("reward_breakdown")
+                if r_bd:
+                    for key, val in r_bd.items():
+                        writer.add_scalar(f"train/reward_{key}", val, ep)
 
         if (ep + 1) % cfg.eval_freq == 0:
             eval_env = initialize_gym(
@@ -266,7 +314,7 @@ def train(
                 max_steps=cfg.max_steps,
                 capture_bonus=cfg.capture_bonus,
             )
-            avg_r = evaluate(eval_env, policy, device)
+            avg_r, eval_metrics = evaluate(eval_env, policy, device)
             logging.info(
                 "Episode %d: avg_reward=%.2f epsilon=%.3f curriculum=%.2f",
                 ep + 1,
@@ -276,6 +324,18 @@ def train(
             )
             if writer:
                 writer.add_scalar("eval/avg_reward", avg_r, ep)
+                writer.add_scalar(
+                    "eval/min_start_ratio", eval_metrics["avg_min_start_ratio"], ep
+                )
+                writer.add_scalar(
+                    "eval/min_distance", eval_metrics["avg_min_distance"], ep
+                )
+                writer.add_scalar(
+                    "eval/episode_steps", eval_metrics["avg_episode_steps"], ep
+                )
+                writer.add_scalar(
+                    "eval/capture_rate", eval_metrics["capture_rate"], ep
+                )
 
         if (
             cfg.checkpoint_every
