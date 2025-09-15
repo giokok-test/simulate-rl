@@ -8,7 +8,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from pursuit_evasion import load_config
 from curriculum import Curriculum, initialize_gym
-from train_pursuer_qlearning import QNetwork, ACTIONS
+from train_pursuer_qlearning import QNetwork, build_action_set
 
 # Discretisation for legacy Q-table models
 N_BINS = 10
@@ -96,12 +96,13 @@ def run_episode(
         curriculum.stage = int(progress * max(curriculum.stages - 1, 1))
     env = initialize_gym(cfg, curriculum=curriculum, max_steps=max_steps)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    action_table = build_action_set(env.env.cfg)
 
     use_q_table = model_path.endswith(".npy")
     if use_q_table:
         q_table = np.load(model_path)
     else:
-        model = QNetwork(env.observation_space.shape[0], len(ACTIONS))
+        model = QNetwork(env.observation_space.shape[0], len(action_table))
         state = torch.load(model_path, map_location=device)
         model.load_state_dict(state)
         model.to(device)
@@ -145,12 +146,12 @@ def run_episode(
             t0 = time.perf_counter()
         if use_q_table:
             idx = _discretise(obs)
-            action = ACTIONS[int(np.argmax(q_table[idx]))]
+            action = action_table[int(np.argmax(q_table[idx]))]
         else:
             with torch.no_grad():
                 obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
                 q_values = model(obs_t)
-            action = ACTIONS[int(torch.argmax(q_values, dim=1).item())]
+            action = action_table[int(torch.argmax(q_values, dim=1).item())]
         if profile:
             infer_time += time.perf_counter() - t0
             t0 = time.perf_counter()
