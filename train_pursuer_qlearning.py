@@ -23,8 +23,9 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from collections import deque
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Deque, Tuple
 
 import numpy as np
 import torch
@@ -125,6 +126,56 @@ class QNetwork(nn.Module):
         return self.net(x)
 
 
+def _extract_parameter_ranges(cfg: dict, prefix: str = "") -> dict[str, tuple[float, float]]:
+    """Return numeric ranges (min, max) discovered in ``cfg``.
+
+    The helper looks for list/tuple values of length two as well as matching
+    ``min_*``/``max_*`` pairs. Keys are concatenated with ``.`` to form a
+    hierarchical identifier.
+    """
+
+    ranges: dict[str, tuple[float, float]] = {}
+    min_candidates: dict[str, float] = {}
+    max_candidates: dict[str, float] = {}
+
+    for key, value in cfg.items():
+        new_prefix = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            ranges.update(_extract_parameter_ranges(value, new_prefix))
+        elif isinstance(value, (list, tuple)) and len(value) == 2:
+            if all(isinstance(v, (int, float)) for v in value):
+                low, high = float(value[0]), float(value[1])
+                if low > high:
+                    low, high = high, low
+                ranges[new_prefix] = (low, high)
+        elif isinstance(value, (int, float)):
+            if key.startswith("min_"):
+                min_candidates[key[4:]] = float(value)
+            elif key.startswith("max_"):
+                max_candidates[key[4:]] = float(value)
+
+    for base, min_val in min_candidates.items():
+        if base in max_candidates:
+            max_val = max_candidates[base]
+            low, high = (min_val, max_val) if min_val <= max_val else (max_val, min_val)
+            range_name = f"{prefix}.{base}" if prefix else base
+            ranges[range_name] = (low, high)
+
+    return ranges
+
+
+def _log_parameter_ranges(
+    writer: SummaryWriter, cfg: dict, prefix: str, step: int
+) -> None:
+    """Write environment parameter ranges to TensorBoard."""
+
+    for name, (low, high) in _extract_parameter_ranges(cfg).items():
+        tag = name.replace(".", "/")
+        writer.add_scalar(f"{prefix}/param_range/{tag}/min", low, step)
+        writer.add_scalar(f"{prefix}/param_range/{tag}/max", high, step)
+        writer.add_scalar(f"{prefix}/param_range/{tag}/width", high - low, step)
+
+
 def evaluate(
     env: Env, policy: QNetwork, device: torch.device, episodes: int = 5
 ) -> tuple[float, dict[str, float]]:
@@ -221,6 +272,7 @@ def train(
 
     epsilon = cfg.epsilon_start
     global_step = 0
+    success_window: Deque[int] = deque(maxlen=cfg.batch_size)
     for ep in range(cfg.episodes):
         if curriculum is not None:
             curriculum.advance(ep, cfg.episodes)
@@ -268,8 +320,13 @@ def train(
             if done:
                 break
 
+        success = bool(info.get("outcome") == "capture") if info else False
         if curriculum is not None:
-            curriculum.update(info.get("outcome") == "capture")
+            curriculum.update(success)
+        success_window.append(1 if success else 0)
+        batch_success_rate = (
+            sum(success_window) / len(success_window) if success_window else 0.0
+        )
 
         epsilon = max(cfg.epsilon_end, epsilon * cfg.epsilon_decay)
         if writer:
@@ -280,6 +337,7 @@ def train(
                 writer.add_scalar("train/curriculum_progress", curriculum.progress, ep)
             replay_size = buffer.capacity if buffer.full else buffer.idx
             writer.add_scalar("train/replay_size", replay_size, ep)
+            writer.add_scalar("train/success_rate_batch", batch_success_rate, ep)
             if info:
                 start_d = info.get("start_distance", 0.0)
                 min_d = info.get("min_distance")
@@ -306,6 +364,8 @@ def train(
                 if r_bd:
                     for key, val in r_bd.items():
                         writer.add_scalar(f"train/reward_{key}", val, ep)
+            if hasattr(env, "env") and hasattr(env.env, "cfg"):
+                _log_parameter_ranges(writer, env.env.cfg, "train", ep)
 
         if (ep + 1) % cfg.eval_freq == 0:
             eval_env = initialize_gym(
@@ -336,6 +396,8 @@ def train(
                 writer.add_scalar(
                     "eval/capture_rate", eval_metrics["capture_rate"], ep
                 )
+                if hasattr(eval_env, "env") and hasattr(eval_env.env, "cfg"):
+                    _log_parameter_ranges(writer, eval_env.env.cfg, "eval", ep)
 
         if (
             cfg.checkpoint_every
