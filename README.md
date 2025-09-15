@@ -42,12 +42,14 @@ overriding the episode count and log directory. All defaults live in
 ``setup/training.yaml`` and can be modified directly in that file.
 
 Pass ``--log-dir`` to write TensorBoard metrics such as episode reward,
-evaluation return, loss and exploration rate.
+evaluation return, loss, exploration rate, minimum pursuer--evader distance,
+start-distance ratio and action deltas.
 
 ### Monitoring training with TensorBoard
 
 When ``--log-dir`` is supplied the trainer writes episode reward, loss,
-exploration rate and evaluation return for visualisation with TensorBoard:
+exploration rate, distance ratios, action deltas and evaluation statistics for
+visualisation with TensorBoard:
 
 ```bash
 tensorboard --logdir runs
