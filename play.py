@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from pursuit_evasion import load_config
-from train_pursuer_ppo import PursuerOnlyEnv
+from pursuit_evasion import load_config, PursuerOnlyEnv
 from train_pursuer_qlearning import QNetwork, ACTIONS
 
 # Discretisation for legacy Q-table models
