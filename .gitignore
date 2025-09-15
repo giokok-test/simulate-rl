@@ -9,5 +9,14 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Plots
+*.png
+*.jpeg
+*.pdf
+*.svg
+
+
 runs/
 old/
+# Random files and stuff
+merops/
