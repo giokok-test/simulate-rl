@@ -53,7 +53,8 @@ exploration rate and evaluation return for visualisation with TensorBoard:
 tensorboard --logdir runs
 ```
 
-Periodic checkpoints are stored under ``<log-dir>/checkpoints``.
+Periodic checkpoints are stored under ``<log-dir>/checkpoints`` when
+``--checkpoint-every`` or ``q_learning.checkpoint_every`` is set.
 
 ### Q-learning training
 
@@ -69,6 +70,61 @@ python train_pursuer_qlearning.py --config setup/training.yaml --log-dir runs/dq
 
 The trained weights are saved as ``pursuer_dqn.pt``. Enable TensorBoard logging
 by setting ``q_learning.log_dir`` in ``setup/training.yaml`` or passing ``--log-dir``.
+
+## Curriculum training
+
+The training pipeline supports fixed and adaptive curricula that gradually
+increase task difficulty. Parameters live in the ``curriculum`` section of
+``setup/training.yaml`` and interpolate between ``start`` and ``end``
+configuration blocks. In ``fixed`` mode progress advances linearly over a
+number of discrete stages. ``adaptive`` mode only moves to the next stage when
+the recent success rate exceeds ``success_threshold``.
+
+Environment creation is centralised in :func:`initialize_gym`, which applies
+the current curriculum state before instantiating ``PursuerOnlyEnv``. Both the
+training script and ``play.py`` use this helper.
+
+Enable curriculum training by setting ``curriculum.mode`` and specifying the
+desired interpolation:
+
+```yaml
+curriculum:
+  mode: adaptive          # or "fixed" for linear progression
+  success_threshold: 0.6  # minimum capture rate to advance (adaptive only)
+  window: 64              # episodes in success window
+  stages: 120             # number of discrete curriculum stages
+  start:
+    evader_start:
+      distance_range: [10000.0, 10000.0]
+      initial_speed: 1.0
+    pursuer_start:
+      cone_half_angle: 1.5708
+      inner_cone_half_angle: 1.5708
+      min_range: 10.0
+      max_range: 50.0
+      yaw_range: [0.0, 0.0]
+      initial_speed_range: [50.0, 50.0]
+      force_target_radius: 0.0
+  end:
+    evader_start:
+      distance_range: [8000.0, 12000.0]
+      initial_speed: 50.0
+    pursuer_start:
+      cone_half_angle: 1.5
+      inner_cone_half_angle: 1.3
+      min_range: 1000.0
+      max_range: 5000.0
+      yaw_range: [-2.0, 2.0]
+      initial_speed_range: [50.0, 75.0]
+      force_target_radius: 350.0
+```
+
+When ``mode`` is set the trainer automatically widens the spawn range and
+other parameters as the policy succeeds.
+
+The ``play.py`` utility uses the same configuration and applies the curriculum
+state before running a single episode. Pass ``--progress`` to visualise
+intermediate stages.
 
 ### Q-learning theory
 

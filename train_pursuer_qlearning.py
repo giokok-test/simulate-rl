@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -32,7 +33,8 @@ import yaml
 from gymnasium import Env
 from torch.utils.tensorboard import SummaryWriter
 
-from pursuit_evasion import load_config, PursuerOnlyEnv
+from pursuit_evasion import load_config
+from curriculum import Curriculum, initialize_gym
 
 
 # Action set: [acceleration magnitude, yaw, pitch]
@@ -65,6 +67,8 @@ class QConfig:
     eval_freq: int = 50
     max_steps: int = 500
     log_dir: str | None = None
+    capture_bonus: float = 0.0
+    checkpoint_every: int | None = None
 
 
 class ReplayBuffer:
@@ -164,17 +168,30 @@ def compute_loss(
     return nn.functional.mse_loss(q, target_q)
 
 
-def train(cfg: QConfig, env_cfg: dict) -> QNetwork:
+def train(
+    cfg: QConfig,
+    env_cfg: dict,
+    curriculum: Curriculum | None = None,
+    *,
+    save_path: str | None = None,
+    resume_from: str | None = None,
+) -> QNetwork:
     """Run training loop and return the trained Q-network."""
 
     logging.info("Training for %d episodes", cfg.episodes)
-    env = PursuerOnlyEnv(env_cfg, max_steps=cfg.max_steps)
-    obs_dim = env.observation_space.shape[0]
+    # Create a temporary env to determine observation dimensions.
+    tmp_env = initialize_gym(env_cfg, curriculum=curriculum, max_steps=cfg.max_steps)
+    obs_dim = tmp_env.observation_space.shape[0]
     n_actions = len(ACTIONS)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     policy = QNetwork(obs_dim, n_actions).to(device)
     target = QNetwork(obs_dim, n_actions).to(device)
+    if resume_from:
+        state = torch.load(resume_from, map_location=device)
+        policy.load_state_dict(state)
+        target.load_state_dict(state)
+        logging.info("Loaded checkpoint from %s", resume_from)
     target.load_state_dict(policy.state_dict())
     optim = torch.optim.Adam(policy.parameters(), lr=cfg.lr)
     buffer = ReplayBuffer(cfg.buffer_size, obs_dim)
@@ -183,10 +200,19 @@ def train(cfg: QConfig, env_cfg: dict) -> QNetwork:
     epsilon = cfg.epsilon_start
     global_step = 0
     for ep in range(cfg.episodes):
+        if curriculum is not None:
+            curriculum.advance(ep, cfg.episodes)
+        env = initialize_gym(
+            env_cfg,
+            curriculum=curriculum,
+            max_steps=cfg.max_steps,
+            capture_bonus=cfg.capture_bonus,
+        )
         obs, _ = env.reset()
         total_reward = 0.0
         q_sum = 0.0
         q_count = 0
+        info = {}
         for _ in range(cfg.max_steps):
             global_step += 1
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
@@ -200,7 +226,7 @@ def train(cfg: QConfig, env_cfg: dict) -> QNetwork:
             q_sum += float(q_values.max().item())
             q_count += 1
 
-            next_obs, reward, done, _, _ = env.step(ACTIONS[action_idx])
+            next_obs, reward, done, _, info = env.step(ACTIONS[action_idx])
             buffer.add(obs, action_idx, reward, next_obs, done)
             obs = next_obs
             total_reward += reward
@@ -220,22 +246,52 @@ def train(cfg: QConfig, env_cfg: dict) -> QNetwork:
             if done:
                 break
 
+        if curriculum is not None:
+            curriculum.update(info.get("outcome") == "capture")
+
         epsilon = max(cfg.epsilon_end, epsilon * cfg.epsilon_decay)
         if writer:
             writer.add_scalar("train/episode_reward", total_reward, ep)
             writer.add_scalar("train/epsilon", epsilon, ep)
             writer.add_scalar("train/avg_q", q_sum / max(q_count, 1), ep)
+            if curriculum is not None:
+                writer.add_scalar("train/curriculum_progress", curriculum.progress, ep)
             replay_size = buffer.capacity if buffer.full else buffer.idx
             writer.add_scalar("train/replay_size", replay_size, ep)
 
         if (ep + 1) % cfg.eval_freq == 0:
-            eval_env = PursuerOnlyEnv(env_cfg, max_steps=cfg.max_steps)
+            eval_env = initialize_gym(
+                env_cfg,
+                curriculum=curriculum,
+                max_steps=cfg.max_steps,
+                capture_bonus=cfg.capture_bonus,
+            )
             avg_r = evaluate(eval_env, policy, device)
             logging.info(
-                "Episode %d: avg_reward=%.2f epsilon=%.3f", ep + 1, avg_r, epsilon
+                "Episode %d: avg_reward=%.2f epsilon=%.3f curriculum=%.2f",
+                ep + 1,
+                avg_r,
+                epsilon,
+                curriculum.progress if curriculum is not None else 0.0,
             )
             if writer:
                 writer.add_scalar("eval/avg_reward", avg_r, ep)
+
+        if (
+            cfg.checkpoint_every
+            and save_path
+            and (ep + 1) % cfg.checkpoint_every == 0
+        ):
+            base, ext = os.path.splitext(os.path.basename(save_path))
+            ckpt_file = f"{base}_ckpt_{ep+1}{ext}"
+            if cfg.log_dir:
+                ckpt_dir = os.path.join(cfg.log_dir, "checkpoints")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                ckpt_path = os.path.join(ckpt_dir, ckpt_file)
+            else:
+                ckpt_path = os.path.join(os.path.dirname(save_path), ckpt_file)
+            torch.save(policy.state_dict(), ckpt_path)
+            logging.info("Saved checkpoint to %s", ckpt_path)
 
     if writer:
         writer.close()
@@ -252,6 +308,18 @@ def main() -> None:
     parser.add_argument(
         "--save-path", type=str, default="pursuer_dqn.pt", help="output weight file"
     )
+    parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=None,
+        help="save a checkpoint every N episodes",
+    )
+    parser.add_argument(
+        "--resume-from",
+        type=str,
+        default=None,
+        help="load model weights from this checkpoint before training",
+    )
     parser.add_argument("--episodes", type=int, default=None, help="override episode count")
     parser.add_argument("--log-dir", type=str, default=None, help="TensorBoard directory")
     args = parser.parse_args()
@@ -264,9 +332,30 @@ def main() -> None:
         q_cfg.episodes = args.episodes
     if args.log_dir is not None:
         q_cfg.log_dir = args.log_dir
+    if args.checkpoint_every is not None:
+        q_cfg.checkpoint_every = args.checkpoint_every
+
+    cur_cfg = full_cfg.get("curriculum") or {}
+    curriculum = None
+    mode = cur_cfg.get("mode")
+    if mode:
+        curriculum = Curriculum(
+            start=cur_cfg.get("start", {}),
+            end=cur_cfg.get("end", {}),
+            mode=mode,
+            stages=cur_cfg.get("stages", 2),
+            success_threshold=cur_cfg.get("success_threshold", 0.6),
+            window=cur_cfg.get("window", 64),
+        )
 
     env_cfg = load_config()
-    model = train(q_cfg, env_cfg)
+    model = train(
+        q_cfg,
+        env_cfg,
+        curriculum,
+        save_path=args.save_path,
+        resume_from=args.resume_from,
+    )
     torch.save(model.state_dict(), args.save_path)
     logging.info("Saved model to %s", args.save_path)
 
