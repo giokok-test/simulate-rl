@@ -12,15 +12,15 @@ def load_config(path: str | None = None) -> dict:
     """Load configuration parameters.
 
     When ``path`` is ``None`` the function reads ``evader.yaml``,
-    ``pursuer.yaml``, ``env.yaml`` and ``training.yaml`` located next to this
-    file and merges them into a single dictionary.  If ``path`` points to a
-    directory the same file names are loaded from that directory.  Supplying a
-    path to a specific YAML file preserves the original behaviour and returns
-    its contents directly.
+    ``pursuer.yaml``, ``env.yaml`` and ``training.yaml`` from the ``setup``
+    subdirectory next to this file and merges them into a single dictionary.
+    If ``path`` points to a directory the same file names are loaded from
+    that directory.  Supplying a path to a specific YAML file preserves the
+    original behaviour and returns its contents directly.
     """
 
     if path is None:
-        base = os.path.dirname(__file__)
+        base = os.path.join(os.path.dirname(__file__), "setup")
     elif os.path.isdir(path):
         base = path
     else:
