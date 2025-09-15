@@ -38,18 +38,64 @@ from pursuit_evasion import load_config
 from curriculum import Curriculum, initialize_gym
 
 
-# Action set: [acceleration magnitude, yaw, pitch]
-ACTIONS = np.array(
-    [
-        [0.0, 0.0, 0.0],  # do nothing
-        [10.0, 0.0, 0.0],  # thrust forward
-        [0.0, -0.2, 0.0],  # yaw left
-        [0.0, 0.2, 0.0],  # yaw right
-        [0.0, 0.0, 0.2],  # pitch up
-        [0.0, 0.0, -0.2],  # pitch down
-    ],
-    dtype=np.float32,
-)
+def _to_radians(value: float | int | None) -> float:
+    """Return ``value`` expressed in radians."""
+
+    if value is None:
+        return 0.0
+    val = float(value)
+    if val > 2 * np.pi:
+        return float(np.deg2rad(val))
+    return val
+
+
+def build_action_set(cfg: dict) -> np.ndarray:
+    """Derive the discrete pursuer action set from ``cfg``.
+
+    The environment limits the commanded acceleration magnitude and angular
+    rates based on the time step and aircraft performance envelope. Rather than
+    hard-coding numbers that are later clipped, we scale each manoeuvre by the
+    configured maximum change per second. This keeps the discrete action space
+    valid even when the simulation ``time_step`` changes.
+
+    Parameters
+    ----------
+    cfg : dict
+        Environment configuration dictionary containing ``time_step`` and the
+        pursuer performance values.
+
+    Returns
+    -------
+    np.ndarray
+        Six discrete action vectors ``[accel, yaw, pitch]`` suitable for
+        :class:`PursuerOnlyEnv`.
+    """
+
+    dt = float(cfg.get("time_step", 0.1))
+    pursuer_cfg = cfg.get("pursuer", {})
+    max_acc = float(pursuer_cfg.get("max_acceleration", 0.0))
+    yaw_rate = _to_radians(pursuer_cfg.get("yaw_rate", pursuer_cfg.get("turn_rate", 0.0)))
+    pitch_rate = _to_radians(pursuer_cfg.get("pitch_rate", pursuer_cfg.get("turn_rate", 0.0)))
+    stall = _to_radians(pursuer_cfg.get("stall_angle", np.pi / 2))
+
+    max_yaw_step = float(np.clip(yaw_rate * dt, 0.0, np.pi))
+    max_pitch_step = float(np.clip(pitch_rate * dt, 0.0, stall))
+
+    return np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [max_acc, 0.0, 0.0],
+            [0.0, -max_yaw_step, 0.0],
+            [0.0, max_yaw_step, 0.0],
+            [0.0, 0.0, max_pitch_step],
+            [0.0, 0.0, -max_pitch_step],
+        ],
+        dtype=np.float32,
+    )
+
+
+# Default action table derived from the repository configuration.
+ACTIONS = build_action_set(load_config())
 
 
 @dataclass
@@ -201,10 +247,16 @@ def _log_training_batch_stats(
 
 
 def evaluate(
-    env: Env, policy: QNetwork, device: torch.device, episodes: int = 5
+    env: Env,
+    policy: QNetwork,
+    device: torch.device,
+    episodes: int = 5,
+    *,
+    actions: np.ndarray | None = None,
 ) -> tuple[float, dict[str, float]]:
     """Greedy policy evaluation returning mean reward and auxiliary metrics."""
 
+    action_table = ACTIONS if actions is None else actions
     rewards = []
     min_start_ratios: list[float] = []
     min_distances: list[float] = []
@@ -218,7 +270,7 @@ def evaluate(
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
             with torch.no_grad():
                 q_values = policy(obs_t)
-            action = ACTIONS[int(torch.argmax(q_values, dim=1).item())]
+            action = action_table[int(torch.argmax(q_values, dim=1).item())]
             obs, reward, done, _, info = env.step(action)
             total += reward
             if done:
@@ -276,10 +328,15 @@ def train(
     """Run training loop and return the trained Q-network."""
 
     logging.info("Training for %d episodes", cfg.episodes)
-    # Create a temporary env to determine observation dimensions.
+    # Determine observation dimensions and derive the discrete action table from config.
     tmp_env = initialize_gym(env_cfg, curriculum=curriculum, max_steps=cfg.max_steps)
     obs_dim = tmp_env.observation_space.shape[0]
-    n_actions = len(ACTIONS)
+    action_table = build_action_set(tmp_env.env.cfg)
+    if not np.allclose(action_table, build_action_set(env_cfg)):
+        logging.info("Action set derived from curriculum-adjusted configuration")
+    n_actions = len(action_table)
+    logging.info("Discrete action table (acc, yaw, pitch): %s", action_table)
+    tmp_env.close()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     policy = QNetwork(obs_dim, n_actions).to(device)
@@ -330,7 +387,7 @@ def train(
             q_sum += float(q_values.max().item())
             q_count += 1
 
-            next_obs, reward, done, _, info = env.step(ACTIONS[action_idx])
+            next_obs, reward, done, _, info = env.step(action_table[action_idx])
             buffer.add(obs, action_idx, reward, next_obs, done)
             obs = next_obs
             total_reward += reward
@@ -404,7 +461,14 @@ def train(
                 max_steps=cfg.max_steps,
                 capture_bonus=cfg.capture_bonus,
             )
-            avg_r, eval_metrics = evaluate(eval_env, policy, device)
+            eval_actions = build_action_set(eval_env.env.cfg)
+            if not np.allclose(eval_actions, action_table):
+                logging.warning(
+                    "Evaluation env action table differs from training table; using training values"
+                )
+            avg_r, eval_metrics = evaluate(
+                eval_env, policy, device, actions=action_table
+            )
             logging.info(
                 "Episode %d: avg_reward=%.2f epsilon=%.3f curriculum=%.2f",
                 ep + 1,

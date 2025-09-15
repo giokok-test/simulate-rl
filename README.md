@@ -70,6 +70,11 @@ The ``train_pursuer_qlearning.py`` script implements deep Q-learning with a
 replay buffer and target network. Continuous observations feed a small MLP
 which outputs action-values for the discrete manoeuvre set.
 
+The manoeuvres themselves are derived from ``setup/env.yaml`` at runtime via
+``build_action_set``. The helper scales acceleration, yaw and pitch commands by
+``time_step`` and the pursuer's maximum rates so that discrete actions remain
+valid when either quantity changes.
+
 Run training with:
 
 ```bash
