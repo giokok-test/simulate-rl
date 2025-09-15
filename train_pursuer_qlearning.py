@@ -43,10 +43,10 @@ ACTIONS = np.array(
     [
         [0.0, 0.0, 0.0],  # do nothing
         [10.0, 0.0, 0.0],  # thrust forward
-        [10.0, -0.2, 0.0],  # yaw left
-        [10.0, 0.2, 0.0],  # yaw right
-        [10.0, 0.0, 0.2],  # pitch up
-        [10.0, 0.0, -0.2],  # pitch down
+        [0.0, -0.2, 0.0],  # yaw left
+        [0.0, 0.2, 0.0],  # yaw right
+        [0.0, 0.0, 0.2],  # pitch up
+        [0.0, 0.0, -0.2],  # pitch down
     ],
     dtype=np.float32,
 )
