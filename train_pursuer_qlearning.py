@@ -23,7 +23,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass
 from typing import Deque, Tuple
 
@@ -176,6 +176,30 @@ def _log_parameter_ranges(
         writer.add_scalar(f"{prefix}/param_range/{tag}/width", high - low, step)
 
 
+def _log_training_batch_stats(
+    batch_index: int,
+    episodes: int,
+    outcomes: Counter[str],
+    avg_reward: float,
+    avg_duration: float,
+) -> None:
+    """Print aggregate statistics for a completed batch of episodes."""
+
+    if episodes == 0:
+        return
+    outcome_summary = " ".join(
+        f"{name}:{count}" for name, count in sorted(outcomes.items())
+    )
+    logging.info(
+        "Train batch %d (%d episodes): outcomes=%s avg_reward=%.2f avg_duration=%.1f",
+        batch_index,
+        episodes,
+        outcome_summary or "none",
+        avg_reward,
+        avg_duration,
+    )
+
+
 def evaluate(
     env: Env, policy: QNetwork, device: torch.device, episodes: int = 5
 ) -> tuple[float, dict[str, float]]:
@@ -273,6 +297,12 @@ def train(
     epsilon = cfg.epsilon_start
     global_step = 0
     success_window: Deque[int] = deque(maxlen=cfg.batch_size)
+    batch_window = max(cfg.batch_size, 1)
+    batch_outcomes: Counter[str] = Counter()
+    batch_reward_sum = 0.0
+    batch_duration_sum = 0.0
+    batch_episode_count = 0
+    batch_index = 0
     for ep in range(cfg.episodes):
         if curriculum is not None:
             curriculum.advance(ep, cfg.episodes)
@@ -399,6 +429,31 @@ def train(
                 if hasattr(eval_env, "env") and hasattr(eval_env.env, "cfg"):
                     _log_parameter_ranges(writer, eval_env.env.cfg, "eval", ep)
 
+        outcome_name = "unknown"
+        episode_steps = float(getattr(env, "max_steps", cfg.max_steps))
+        if info:
+            outcome_val = info.get("outcome")
+            if isinstance(outcome_val, str) and outcome_val:
+                outcome_name = outcome_val
+            episode_steps = float(info.get("episode_steps", episode_steps))
+        batch_outcomes[outcome_name] += 1
+        batch_reward_sum += total_reward
+        batch_duration_sum += episode_steps
+        batch_episode_count += 1
+        if batch_episode_count >= batch_window:
+            batch_index += 1
+            _log_training_batch_stats(
+                batch_index,
+                batch_episode_count,
+                batch_outcomes,
+                batch_reward_sum / batch_episode_count,
+                batch_duration_sum / batch_episode_count,
+            )
+            batch_outcomes.clear()
+            batch_reward_sum = 0.0
+            batch_duration_sum = 0.0
+            batch_episode_count = 0
+
         if (
             cfg.checkpoint_every
             and save_path
@@ -417,6 +472,15 @@ def train(
 
     if writer:
         writer.close()
+    if batch_episode_count:
+        batch_index += 1
+        _log_training_batch_stats(
+            batch_index,
+            batch_episode_count,
+            batch_outcomes,
+            batch_reward_sum / batch_episode_count,
+            batch_duration_sum / batch_episode_count,
+        )
     return policy
 
 
