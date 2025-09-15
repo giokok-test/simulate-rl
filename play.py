@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from pursuit_evasion import load_config, PursuerOnlyEnv
+from pursuit_evasion import load_config
+from curriculum import Curriculum, initialize_gym
 from train_pursuer_qlearning import QNetwork, ACTIONS
 
 # Discretisation for legacy Q-table models
@@ -64,16 +65,36 @@ def draw_spawn_volume(
     # region remains visible without the heavy meshes.
 
 
-def run_episode(model_path: str, max_steps: int | None = None, profile: bool = False) -> None:
+def run_episode(
+    model_path: str,
+    max_steps: int | None = None,
+    profile: bool = False,
+    *,
+    config_path: str | None = None,
+    progress: float = 1.0,
+) -> None:
     """Run one episode using ``model_path``.
 
     When ``profile`` is ``True`` the function records how much time is spent
     on inference, environment stepping and plotting before printing a summary.
     """
 
-    cfg = load_config()
+    cfg = load_config(config_path)
     cfg['evader']['awareness_mode'] = 1
-    env = PursuerOnlyEnv(cfg, max_steps=max_steps)
+    cur_cfg = cfg.get("curriculum") or {}
+    curriculum = None
+    mode = cur_cfg.get("mode")
+    if mode:
+        curriculum = Curriculum(
+            start=cur_cfg.get("start", {}),
+            end=cur_cfg.get("end", {}),
+            mode=mode,
+            stages=cur_cfg.get("stages", 2),
+            success_threshold=cur_cfg.get("success_threshold", 0.6),
+            window=cur_cfg.get("window", 64),
+        )
+        curriculum.stage = int(progress * max(curriculum.stages - 1, 1))
+    env = initialize_gym(cfg, curriculum=curriculum, max_steps=max_steps)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     use_q_table = model_path.endswith(".npy")
@@ -349,6 +370,24 @@ if __name__ == "__main__":
         action="store_true",
         help="print timing information",
     )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="optional path to configuration directory or file",
+    )
+    parser.add_argument(
+        "--progress",
+        type=float,
+        default=1.0,
+        help="curriculum progress in [0,1] when using a curriculum",
+    )
     args = parser.parse_args()
 
-    run_episode(args.model, max_steps=args.steps, profile=args.profile)
+    run_episode(
+        args.model,
+        max_steps=args.steps,
+        profile=args.profile,
+        config_path=args.config,
+        progress=args.progress,
+    )
