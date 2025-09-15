@@ -44,7 +44,11 @@ overriding the episode count and log directory. All defaults live in
 Pass ``--log-dir`` to write TensorBoard metrics such as episode reward,
 evaluation return, loss, exploration rate, minimum pursuer--evader distance,
 start-distance ratio, action deltas, the sliding success rate over the most
-recent training batch and the active curriculum parameter ranges.
+recent training batch and the active curriculum parameter ranges. In addition,
+the trainer prints a concise console summary after every
+``q_learning.batch_size`` episodes showing the outcome counts together with the
+mean reward and mean episode duration for that batch so you can spot drifts
+without launching TensorBoard.
 
 ### Monitoring training with TensorBoard
 
