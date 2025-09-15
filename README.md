@@ -70,6 +70,87 @@ python train_pursuer_qlearning.py --config setup/training.yaml --log-dir runs/dq
 The trained weights are saved as ``pursuer_dqn.pt``. Enable TensorBoard logging
 by setting ``q_learning.log_dir`` in ``setup/training.yaml`` or passing ``--log-dir``.
 
+### Q-learning theory
+
+- Learns an action-value function $Q(s,a)$ estimating long-term returns via temporal-difference updates.
+- Off-policy: updates use greedy targets while the behaviour policy explores.
+- Converges to the optimal policy in tabular settings with sufficient exploration (Watkins & Dayan, 1992).
+
+In this pursuit--evasion task the pursuer observes continuous state vectors and selects from a discrete manoeuvre set.
+Q-learning evaluates how each manoeuvre moves the pursuer toward capturing the evader while avoiding penalties for crashes or excessive separation.
+Because the state space is continuous we approximate $Q_\theta(s,a)$ with a neural network trained on minibatches sampled from a replay buffer.
+
+```python
+import random
+from collections import deque
+
+import gymnasium as gym
+import torch
+from torch import nn, Tensor
+
+
+class QNet(nn.Module):
+    """Small MLP approximating Q(s, a)."""
+
+    def __init__(self, obs_dim: int, act_dim: int) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, act_dim),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.net(x)
+
+
+def q_learning(env: gym.Env) -> None:
+    """Minimal Deep Q-learning loop."""
+
+    net = QNet(env.observation_space.shape[0], env.action_space.n)
+    target = QNet(env.observation_space.shape[0], env.action_space.n)
+    optim = torch.optim.Adam(net.parameters(), lr=1e-3)
+    buf: deque = deque(maxlen=10_000)
+    eps, gamma = 1.0, 0.99
+    obs, _ = env.reset()
+    for step in range(1000):
+        if random.random() < eps:
+            act = env.action_space.sample()
+        else:
+            with torch.no_grad():
+                act = torch.argmax(net(torch.tensor(obs).float())).item()
+        n_obs, reward, term, trunc, _ = env.step(act)
+        buf.append((obs, act, reward, n_obs, term or trunc))
+        obs = n_obs
+        if len(buf) >= 32:
+            batch = random.sample(buf, 32)
+            o, a, r, n_o, d = map(lambda x: torch.tensor(x).float(), zip(*batch))
+            q = net(o).gather(1, a.long().unsqueeze(1)).squeeze()
+            with torch.no_grad():
+                target_q = target(n_o).max(1).values
+            y = r + gamma * target_q * (1 - d)
+            loss = torch.nn.functional.mse_loss(q, y)
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
+        if step % 50 == 0:
+            target.load_state_dict(net.state_dict())
+        eps = max(0.05, eps * 0.995)
+
+```
+
+**Evaluation plan**
+
+- Log episode return, minimum pursuer--evader distance, Q-value estimates and epsilon.
+- Ablations: vary learning rate, replay capacity and exploration decay.
+- Watch for divergence from overly large step sizes or insufficient exploration causing unstable Q-values.
+
+**Next steps**
+
+- Compare against policy-gradient baselines such as PPO or SAC.
+- Investigate prioritised replay and Double/Dueling DQN variants.
+- Read: Watkins & Dayan (1992); Mnih et al. (2015).
+
 ## Additional scripts
 
 - `pursuit_evasion.py` contains the environment implementation along with a
