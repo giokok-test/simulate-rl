@@ -25,7 +25,7 @@ The `requirements.txt` file lists the packages used in the example scripts.
 
 The environment configuration is split across four YAML files:
 ``evader.yaml``, ``pursuer.yaml``, ``env.yaml`` and ``training.yaml``. These
-files live in the repository root and are loaded automatically by the
+files reside in the ``setup/`` directory and are loaded automatically by the
 scripts.
 
 ## Running the first training
@@ -39,7 +39,7 @@ python train_pursuer_qlearning.py --log-dir runs/dqn
 
 Weights are saved to `pursuer_dqn.pt` by default. Command line arguments allow
 overriding the episode count and log directory. All defaults live in
-``training.yaml`` and can be modified directly in that file.
+``setup/training.yaml`` and can be modified directly in that file.
 
 Pass ``--log-dir`` to write TensorBoard metrics such as episode reward,
 evaluation return, loss and exploration rate.
@@ -64,17 +64,17 @@ which outputs action-values for the discrete manoeuvre set.
 Run training with:
 
 ```bash
-python train_pursuer_qlearning.py --config training.yaml --log-dir runs/dqn
+python train_pursuer_qlearning.py --config setup/training.yaml --log-dir runs/dqn
 ```
 
 The trained weights are saved as ``pursuer_dqn.pt``. Enable TensorBoard logging
-by setting ``q_learning.log_dir`` in ``training.yaml`` or passing ``--log-dir``.
+by setting ``q_learning.log_dir`` in ``setup/training.yaml`` or passing ``--log-dir``.
 
 ### Curriculum training
 
 The training script optionally supports gradually increasing the starting
 difficulty of each episode. The ``training.curriculum`` section in
-``training.yaml`` contains ``start`` and ``end`` dictionaries with values that are
+``setup/training.yaml`` contains ``start`` and ``end`` dictionaries with values that are
 interpolated over the course of training. Any numeric field under these
 dictionaries is interpolated logarithmically from the ``start`` value to the
 ``end`` value when both numbers are positive. This produces small increments
@@ -128,7 +128,7 @@ which is useful for quickly checking that the environment works.
 
 - `play.py` loads a saved Q-network (``.pt``) or legacy Q-table (``.npy``) and
   runs a single episode. Episodes run for the duration specified by
-  `episode_duration` in ``env.yaml`` unless `--steps`` overrides the maximum
+  `episode_duration` in ``setup/env.yaml`` unless `--steps`` overrides the maximum
   number of simulation steps.
   The plot now highlights the starting and final positions of both agents,
   marks the evader's goal position and draws arrows indicating the initial
@@ -144,7 +144,7 @@ which is useful for quickly checking that the environment works.
 - `plot_config.py` renders a stand-alone visualisation of the environment
   configuration showing an outline of the spawn volume. The accompanying
   `SpawnVolumeDemo.ipynb` notebook calls this script so you can interactively
-  adjust ``env.yaml`` and inspect the effect.
+  adjust ``setup/env.yaml`` and inspect the effect.
 
 The environment stores several statistics for each episode. When an episode
 finishes the ``info`` dictionary returned from ``env.step`` contains the
@@ -168,8 +168,8 @@ available via the ``*_delta`` metrics described above.
 ## Adjusting environment parameters
 
 All physical constants and environment options are stored in the
-``evader.yaml``, ``pursuer.yaml`` and ``env.yaml`` files in the repository
-root.  Simply edit these files to tweak values such as masses, maximum
+``setup/evader.yaml``, ``setup/pursuer.yaml`` and ``setup/env.yaml`` files.
+Simply edit these files to tweak values such as masses, maximum
 acceleration or the starting distance of
 the pursuer.  The evader's starting position is also randomised using
 the `evader_start.distance_range` and `evader_start.altitude` settings,
@@ -193,10 +193,9 @@ training curriculum to gradually narrow or expand the spawn speed
 interval.
 Both `pursuit_evasion.py` and `train_pursuer_qlearning.py` load the configuration
 at runtime, so changes take effect the next time you run the script.
-The reward shaping parameters `shaping_weight`, `closer_weight`,
-`heading_weight` and `align_weight` can be adjusted
-here as well to encourage desired
-behaviour. The `separation_cutoff_factor` option defines a multiplier of
+The reward shaping parameters `shaping_weight` and `align_weight` can be
+adjusted here to encourage desired behaviour. The `separation_cutoff_factor`
+option defines a multiplier of
 the initial pursuer--evader distance that ends the episode when the
 agents drift farther apart than this threshold. When this occurs the
 pursuer receives `separation_penalty` as a terminal reward.
@@ -216,8 +215,8 @@ evader receives about the pursuer:
 
 The `yaw_rate` and `pitch_rate` values for both agents are specified in
 degrees per second and are converted internally to radians per second.
-Similarly, the `stall_angle` parameter in ``evader.yaml`` and
-``pursuer.yaml`` is given in
+Similarly, the `stall_angle` parameter in ``setup/evader.yaml`` and
+``setup/pursuer.yaml`` is given in
 degrees but converted to radians when the environment loads. Actions
 specify yaw and **pitch** where pitch is measured relative to the horizontal
 x–y plane (positive values command an upward climb). Both agents clamp

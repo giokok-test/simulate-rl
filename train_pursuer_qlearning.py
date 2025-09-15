@@ -239,7 +239,9 @@ def main() -> None:
     """Entry point for command line execution."""
 
     parser = argparse.ArgumentParser(description="Train pursuer with deep Q-learning")
-    parser.add_argument("--config", type=str, default="training.yaml", help="YAML config file")
+    parser.add_argument(
+        "--config", type=str, default="setup/training.yaml", help="YAML config file"
+    )
     parser.add_argument(
         "--save-path", type=str, default="pursuer_dqn.pt", help="output weight file"
     )
