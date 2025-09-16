@@ -85,6 +85,13 @@ The manoeuvres themselves are derived from ``setup/env.yaml`` at runtime via
 ``time_step`` and the pursuer's maximum rates so that discrete actions remain
 valid when either quantity changes.
 
+During execution the trainer interprets the discrete yaw/pitch entries as
+relative turns and offsets them by the pursuer's current heading before calling
+``env.step``. This mirrors the environment's internal update logic, which moves
+the force vector toward absolute yaw/pitch targets, and ensures each discrete
+action yields a consistent incremental turn regardless of the pursuer's current
+orientation.
+
 Run training with:
 
 ```bash
