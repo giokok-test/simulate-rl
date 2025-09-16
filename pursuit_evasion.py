@@ -753,7 +753,7 @@ class PursuerOnlyEnv(gym.Env):
         timing_bonus = 0.0
         if done and info.get("outcome") == "capture":
             steps = info.get("episode_steps", self.cur_step + 1)
-            timing_bonus = self.capture_bonus * (self.max_steps - steps)
+            timing_bonus = self.capture_bonus * ((self.max_steps - steps) / self.max_steps)
             r_p += timing_bonus
         info["timing_bonus"] = timing_bonus
         if timing_bonus != 0.0:
