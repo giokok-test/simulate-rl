@@ -98,6 +98,61 @@ def build_action_set(cfg: dict) -> np.ndarray:
 ACTIONS = build_action_set(load_config())
 
 
+def _dir_to_yaw_pitch(direction: np.ndarray) -> tuple[float, float]:
+    """Return yaw and pitch angles for ``direction``.
+
+    Parameters
+    ----------
+    direction:
+        Three-dimensional direction vector representing the current pursuer
+        thrust axis.
+
+    Returns
+    -------
+    tuple[float, float]
+        The yaw and pitch angles (radians) corresponding to ``direction``.
+    """
+
+    vec = np.asarray(direction, dtype=np.float32).reshape(-1)
+    if vec.size != 3:
+        msg = f"Expected 3D direction vector, got shape {vec.shape}"
+        raise ValueError(msg)
+    yaw = float(np.arctan2(vec[1], vec[0]))
+    pitch = float(np.arctan2(vec[2], np.linalg.norm(vec[:2])))
+    return yaw, pitch
+
+
+def to_absolute_command(env: Env, base_action: np.ndarray) -> np.ndarray:
+    """Convert relative yaw/pitch commands to absolute targets.
+
+    The discrete action table encodes yaw and pitch deltas so the policy can
+    issue turn commands relative to the pursuer's current heading. The
+    underlying environment, however, expects absolute orientation targets. This
+    helper bridges the representations by reading ``pursuer_force_dir`` from the
+    wrapped environment and offsetting the requested yaw/pitch accordingly.
+    """
+
+    command = np.asarray(base_action, dtype=np.float32).copy()
+    if command.shape != (3,):
+        msg = f"Expected action with shape (3,), received {command.shape}"
+        raise ValueError(msg)
+
+    inner_env = env
+    # Walk through potential Gym wrappers to reach PursuitEvasionEnv.
+    while hasattr(inner_env, "env") and getattr(inner_env, "env") is not inner_env:
+        inner_env = getattr(inner_env, "env")
+
+    force_dir = getattr(inner_env, "pursuer_force_dir", None)
+    if force_dir is None:
+        logging.warning("Falling back to base action; pursuer_force_dir unavailable")
+        return command
+
+    cur_yaw, cur_pitch = _dir_to_yaw_pitch(force_dir)
+    command[1] = cur_yaw + float(command[1])
+    command[2] = cur_pitch + float(command[2])
+    return command
+
+
 @dataclass
 class QConfig:
     """Hyper-parameters for Q-learning."""
@@ -272,8 +327,9 @@ def evaluate(
             obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
             with torch.no_grad():
                 q_values = policy(obs_t)
-            action = action_table[int(torch.argmax(q_values, dim=1).item())]
-            obs, reward, done, _, info = env.step(action)
+            action_idx = int(torch.argmax(q_values, dim=1).item())
+            command = to_absolute_command(env, action_table[action_idx])
+            obs, reward, done, _, info = env.step(command)
             total += reward
             if done:
                 break
@@ -401,7 +457,8 @@ def train(
             q_sum += float(q_values.max().item())
             q_count += 1
 
-            next_obs, reward, done, _, info = env.step(action_table[action_idx])
+            command = to_absolute_command(env, action_table[action_idx])
+            next_obs, reward, done, _, info = env.step(command)
             buffer.add(obs, action_idx, reward, next_obs, done)
             obs = next_obs
             total_reward += reward
