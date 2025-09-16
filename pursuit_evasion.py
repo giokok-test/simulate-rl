@@ -188,6 +188,8 @@ class PursuitEvasionEnv(gym.Env):
         self.heading_weight = self.cfg.get('heading_weight', 0.0)
         # Bonus for directly pointing the pursuer toward the evader.
         self.align_weight = self.cfg.get('align_weight', 0.0)
+        # Constant per-step time penalty applied to the pursuer.
+        self.time_penalty = float(self.cfg.get('time_penalty', 0.001))
         self.meas_err = self.cfg.get('measurement_error_pct', 0.0) / 100.0
         # maximum allowed separation before the episode ends
         self.cutoff_factor = self.cfg.get('separation_cutoff_factor', 2.0)
@@ -310,6 +312,9 @@ class PursuitEvasionEnv(gym.Env):
         # reset reward component totals
         self._reward_breakdown = {
             'terminal': 0.0,
+            'capture_bonus': 0.0,
+            'separation_penalty': 0.0,
+            'pursuer_ground_penalty': 0.0,
             'shaping': 0.0,
             'closer': 0.0,
             'heading': 0.0,
@@ -378,33 +383,40 @@ class PursuitEvasionEnv(gym.Env):
         # Reward for aligning the pursuer and evader headings
         h_e = self.evader_vel / (np.linalg.norm(self.evader_vel) + 1e-8)
         h_p = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
-        heading_bonus = self.heading_weight * float(np.dot(h_p, h_e))
+        heading_cos = float(np.clip(np.dot(h_p, h_e), -1.0, 1.0))
+        heading_bonus = self.heading_weight * heading_cos
         # Bonus for pointing the pursuer's velocity toward the evader
         p_u = self.pursuer_vel / (np.linalg.norm(self.pursuer_vel) + 1e-8)
         los = self.evader_pos - self.pursuer_pos
         los_u = los / (np.linalg.norm(los) + 1e-8)
-        align_bonus = self.align_weight * float(np.dot(p_u, los_u))
+        align_cos = float(np.clip(np.dot(p_u, los_u), -1.0, 1.0))
+        align_bonus = self.align_weight * align_cos
 
         self.prev_pe_dist = dist_pe
         self.prev_target_dist = dist_target
 
-        done, r_e, r_p_terminal, outcome = self._check_done(prev_p_pos, prev_e_pos)
+        done, r_e, r_p_terminal, outcome, terminal_component = self._check_done(
+            prev_p_pos, prev_e_pos
+        )
         shaping_reward = self.shaping_weight * shape_p
         r_e += self.shaping_weight * shape_e
+        time_penalty = -self.time_penalty
         r_p = (
             r_p_terminal
             + shaping_reward
             + closer_bonus
             + heading_bonus
             + align_bonus
-            - 0.001
+            + time_penalty
         )
         self._reward_breakdown['terminal'] += r_p_terminal
+        if terminal_component:
+            self._reward_breakdown[terminal_component] += r_p_terminal
         self._reward_breakdown['shaping'] += shaping_reward
         self._reward_breakdown['closer'] += closer_bonus
         self._reward_breakdown['heading'] += heading_bonus
         self._reward_breakdown['align'] += align_bonus
-        self._reward_breakdown['time'] += -0.001
+        self._reward_breakdown['time'] += time_penalty
         obs = self._get_obs()
         reward = {'evader': r_e, 'pursuer': r_p}
         info = {}
@@ -611,23 +623,23 @@ class PursuitEvasionEnv(gym.Env):
 
         if dist <= self.cfg['capture_radius'] or cross_capture:
             bonus = self.capture_bonus
-            return True, -1.0, bonus, 'capture'
+            return True, -1.0, bonus, 'capture', 'capture_bonus'
         if dist_target_xy <= success_thresh and self.evader_pos[2] > 0.0:
-            return True, 1.0, 0.0, 'evader_success'
+            return True, 1.0, 0.0, 'evader_success', None
         if dist >= self.cutoff_factor * self.start_pe_dist:
             penalty = self.separation_penalty
-            return True, 0.0, penalty, 'separation_exceeded'
+            return True, 0.0, penalty, 'separation_exceeded', 'separation_penalty'
 
         # episode ends if either agent goes below ground level
         if self.pursuer_pos[2] < 0.0:
             penalty = self.cfg.get('pursuer_ground_penalty', -1.0)
-            return True, 0.0, penalty, 'pursuer_ground'
+            return True, 0.0, penalty, 'pursuer_ground', 'pursuer_ground_penalty'
         if self.evader_pos[2] < 0.0:
             max_d = self.cfg.get('target_reward_distance', 100.0)
             reward = max(0.0, 1.0 - (dist_target / max_d) ** 2)
-            return True, reward, 0.0, 'evader_ground'
+            return True, reward, 0.0, 'evader_ground', None
 
-        return False, 0.0, 0.0, None
+        return False, 0.0, 0.0, None, None
 
     def _get_obs(self):
         """Assemble observations for both agents."""
@@ -744,6 +756,9 @@ class PursuerOnlyEnv(gym.Env):
             timing_bonus = self.capture_bonus * (self.max_steps - steps)
             r_p += timing_bonus
         info["timing_bonus"] = timing_bonus
+        if timing_bonus != 0.0:
+            breakdown = info.setdefault("reward_breakdown", {})
+            breakdown["timing_bonus"] = breakdown.get("timing_bonus", 0.0) + timing_bonus
         self.cur_step += 1
         if self.cur_step >= self.max_steps and not done:
             done = True

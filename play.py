@@ -211,6 +211,11 @@ def run_episode(
                 f"yaw_diff={yaw_diff:.2f}  "
                 f"pitch_diff={pitch_diff:.2f}"
             )
+        breakdown = info.get("reward_breakdown")
+        if breakdown:
+            print("Reward breakdown:")
+            for key in sorted(breakdown):
+                print(f"  {key:>24s}: {breakdown[key]:+.3f}")
 
     # Plot the trajectories in 3D
     if profile:
