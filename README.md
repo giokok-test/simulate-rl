@@ -55,11 +55,21 @@ without launching TensorBoard.
 When ``--log-dir`` is supplied the trainer writes episode reward, loss,
 exploration rate, distance ratios, action deltas, active spawn ranges and the
 success rate computed over the last ``q_learning.batch_size`` episodes for
-visualisation with TensorBoard:
+visualisation with TensorBoard. The reward signal is decomposed by type, yielding
+separate ``train/reward_*`` series covering terminal bonuses and penalties
+(capture, separation, ground contact), shaping contributions (heading alignment,
+line-of-sight cosine, distance deltas) and the per-step time cost. Running
+averages of the closest pursuer--evader distance are logged alongside the
+per-episode minima, enabling quicker regression detection without exporting raw
+metrics:
 
 ```bash
 tensorboard --logdir runs
 ```
+
+Evaluation sweeps produce the same breakdown under the ``eval/reward_*`` prefix,
+averaged across greedy rollouts. Compare ``train`` versus ``eval`` charts to
+confirm the policy's alignment and separation shaping terms remain stable.
 
 Periodic checkpoints are stored under ``<log-dir>/checkpoints`` when
 ``--checkpoint-every`` or ``q_learning.checkpoint_every`` is set.
@@ -300,12 +310,17 @@ The initial speed of the pursuer is drawn uniformly from
 velocities.
 Both `pursuit_evasion.py` and `train_pursuer_qlearning.py` load the configuration
 at runtime, so changes take effect the next time you run the script.
-The reward shaping parameters `shaping_weight` and `align_weight` can be
-adjusted here to encourage desired behaviour. The `separation_cutoff_factor`
-option defines a multiplier of
-the initial pursuer--evader distance that ends the episode when the
-agents drift farther apart than this threshold. When this occurs the
-pursuer receives `separation_penalty` as a terminal reward.
+The reward shaping parameters `shaping_weight`, `align_weight`,
+`heading_weight` (cosine similarity between velocity vectors) and
+`closer_weight` (progress toward the evader per step) can be adjusted here to
+encourage desired behaviour. `time_penalty` subtracts a small constant from the
+pursuer on every step, providing pressure to intercept quickly. The
+`separation_cutoff_factor` option defines a multiplier of the initial
+pursuer--evader distance that ends the episode when the agents drift farther
+apart than this threshold. When this occurs the pursuer receives
+`separation_penalty` as a terminal reward, which is tracked separately in the
+TensorBoard breakdown alongside the `pursuer_ground_penalty` should the pursuer
+impact the ground.
 The `capture_bonus` setting adds a time incentive for the pursuer by
 increasing its terminal reward when a capture occurs earlier. The final
 reward becomes `1 + capture_bonus * (max_steps - episode_steps)` where

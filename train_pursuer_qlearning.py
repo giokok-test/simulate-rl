@@ -23,7 +23,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from collections import Counter, deque
+from collections import Counter, defaultdict, deque
 from dataclasses import dataclass
 from typing import Deque, Tuple
 
@@ -262,6 +262,8 @@ def evaluate(
     min_distances: list[float] = []
     episode_steps: list[int] = []
     captures = 0
+    reward_breakdown_totals: defaultdict[str, float] = defaultdict(float)
+    reward_breakdown_count = 0
     for _ in range(episodes):
         obs, _ = env.reset()
         total = 0.0
@@ -285,12 +287,21 @@ def evaluate(
             episode_steps.append(info.get("episode_steps", env.max_steps))
             if info.get("outcome") == "capture":
                 captures += 1
+            breakdown = info.get("reward_breakdown")
+            if breakdown:
+                reward_breakdown_count += 1
+                for key, val in breakdown.items():
+                    reward_breakdown_totals[key] += float(val)
     metrics = {
         "avg_min_distance": float(np.mean(min_distances)) if min_distances else 0.0,
         "avg_min_start_ratio": float(np.mean(min_start_ratios)) if min_start_ratios else 0.0,
         "avg_episode_steps": float(np.mean(episode_steps)) if episode_steps else 0.0,
         "capture_rate": captures / episodes if episodes > 0 else 0.0,
     }
+    if reward_breakdown_count > 0:
+        metrics["reward_breakdown"] = {
+            key: val / reward_breakdown_count for key, val in reward_breakdown_totals.items()
+        }
     return float(np.mean(rewards)), metrics
 
 
@@ -360,6 +371,9 @@ def train(
     batch_duration_sum = 0.0
     batch_episode_count = 0
     batch_index = 0
+    running_min_distance = 0.0
+    running_min_ratio = 0.0
+    min_stats_count = 0
     for ep in range(cfg.episodes):
         if curriculum is not None:
             curriculum.advance(ep, cfg.episodes)
@@ -431,7 +445,13 @@ def train(
                 if min_d is not None and start_d > 0:
                     writer.add_scalar("train/min_distance", min_d, ep)
                     writer.add_scalar("train/start_distance", start_d, ep)
-                    writer.add_scalar("train/min_start_ratio", min_d / start_d, ep)
+                    ratio = float(min_d) / start_d
+                    writer.add_scalar("train/min_start_ratio", ratio, ep)
+                    min_stats_count += 1
+                    running_min_distance += (float(min_d) - running_min_distance) / min_stats_count
+                    running_min_ratio += (ratio - running_min_ratio) / min_stats_count
+                    writer.add_scalar("train/min_distance_avg", running_min_distance, ep)
+                    writer.add_scalar("train/min_start_ratio_avg", running_min_ratio, ep)
                 writer.add_scalar("train/episode_steps", info.get("episode_steps", 0), ep)
                 writer.add_scalar("train/final_distance", info.get("final_distance", 0.0), ep)
                 writer.add_scalar("train/evader_to_target", info.get("evader_to_target", 0.0), ep)
@@ -492,6 +512,10 @@ def train(
                 )
                 if hasattr(eval_env, "env") and hasattr(eval_env.env, "cfg"):
                     _log_parameter_ranges(writer, eval_env.env.cfg, "eval", ep)
+                reward_bd = eval_metrics.get("reward_breakdown")
+                if reward_bd:
+                    for key, val in reward_bd.items():
+                        writer.add_scalar(f"eval/reward_{key}", val, ep)
 
         outcome_name = "unknown"
         episode_steps = float(getattr(env, "max_steps", cfg.max_steps))
